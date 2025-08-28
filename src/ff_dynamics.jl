@@ -20,8 +20,8 @@ function ff_kak(model,ff_space,ff_time,incs,out)
     J = convert(Int64,(xf-xi)/dx)
     N = convert(Int64,tf/dt)
 
-    Jarr = range(xi,xf; step=dx)
-    Narr = range(0.0,tf; step=dt)
+    Jarr = range(xi,xf-dx; step=dx)
+    Narr = range(0.0,tf-dt; step=dt)
 
     # initialization
     F = zeros(Float64, J,N)
@@ -67,8 +67,8 @@ function ff_kak(model,ff_space,ff_time,incs,out)
     #---------- data saving
 
     path = out*"/kak_ff_v=$(-v0).jld2"
-    @save path F
-    println("data saved at "*out )
+    @save path F Jarr Narr v0
+    println("data saved at "*path )
 
 end
 

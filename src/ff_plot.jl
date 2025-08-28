@@ -10,20 +10,22 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
     # savefig check
     if savefig_bool == true
         path_to_savefig = readline()
+    end
 
     # data loading
-    @load path_to_file F Jarr Narr
+    @load path_to_file F Jarr Narr v0
 
-    dt = Narr[end]/length(Narr)
+    dx = Jarr[2]-Jarr[1]
+    dt = Narr[2]-Narr[1]
 
     # plot animation
-    for (t,tval) in enumerate(Narr)
-        if n%20 == 0
+    for (t,tval) in enumerate(Narr[3:end])
+        if t%20 == 0
             plt = plot(Jarr,F[:,t],
                        xlabel=L"x",
                        ylabel=L"\Phi_{\mathrm{KAK}}(x)",
                        xlim=(-10,10),
-                       ylims=(-1.5,1.5),
+                       ylims=(-2.5,1.5),
                        title=L"v_{\mathrm{in}} = "*"$(-v0)"*L"; t = "*"$(round(t*dt,digits=3))",
                        legend=false,
                        color=:black)
@@ -34,6 +36,7 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
             # save figs
             if savefig_bool == true
                 savefig(plt,path_to_savefig*"kak_t=$(lpad(t,5,'0')).png")
+            end
 
             sleep(0.01)
         end
