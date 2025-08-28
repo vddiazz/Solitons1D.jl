@@ -32,7 +32,7 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
             display(plt)
             
             # save figs
-            if savefig_bool = true
+            if savefig_bool == true
                 savefig(plt,path_to_savefig*"kak_t=$(lpad(t,5,'0')).png")
 
             sleep(0.01)
