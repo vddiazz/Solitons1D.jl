@@ -8,7 +8,7 @@ using LaTeXStrings
 function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
 
     # savefig check
-    if savefig_bool = true
+    if savefig_bool == true
         path_to_savefig = readline()
 
     # data loading
