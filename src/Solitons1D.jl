@@ -1,5 +1,9 @@
 module Solitons1D
 
-# Write your package code here.
+include("ff_dynamics.jl")
+export ff_kak
+
+include("ff_plot.jl")
+export ff_anim
 
 end
