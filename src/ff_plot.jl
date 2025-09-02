@@ -26,7 +26,7 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
                        ylabel=L"\Phi_{\mathrm{KAK}}(x)",
                        xlim=(-10,10),
                        ylims=(-2.5,1.5),
-                       title=L"v_{\mathrm{in}} = "*"$(-v0)"*L"; t = "*"$(round(t*dt,digits=3))",
+                       title=L"v_{\mathrm{in}} = "*"$(v0)"*L"; t = "*"$(round(t*dt,digits=3))",
                        legend=false,
                        color=:black)
             
