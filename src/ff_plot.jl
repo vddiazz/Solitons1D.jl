@@ -24,8 +24,8 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
             plt = plot(Jarr,F[:,t],
                        xlabel=L"x",
                        ylabel=L"\Phi_{\mathrm{KAK}}(x)",
-                       xlim=(-10,10),
-                       ylims=(-2.5,1.5),
+                       xlim=(-15,15),
+                       ylims=(-25.,25.),
                        title=L"v_{\mathrm{in}} = "*"$(v0)"*L"; t = "*"$(round(t*dt,digits=3))",
                        legend=false,
                        color=:black)

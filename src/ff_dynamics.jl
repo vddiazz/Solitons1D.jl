@@ -36,13 +36,34 @@ function ff_kak(model,ff_space,ff_time,incs,out)
     # temporal ic: initial configuration
     for j in 1:1:J
         x = xi + j*dx
-        F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 # field
-        F[j,2] = F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 + (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt ) # derivative
+
+        if model == "phi4"
+            F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 # field
+            F[j,2] = F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 + (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt ) # derivative
+        end
+        if model == "phi6"
+            F[j,1] = 0
+            F[j,2] = F[j,1] + 0
+        end
+        if model == "sG"
+            F[j,1] = 4*( atan(exp(gamma*(x+a0))) - atan(exp(gamma*(x-a0))) )
+            F[j,2] = F[j,1] + 4*( -(exp(gamma*(x+a0)*gamma*v0))/(1+exp(2*gamma*(x+a0))) - (exp(gamma*(x-a0)*gamma*v0))/(1+exp(2*gamma*(x-a0)))  )*dt 
+        end
     end
 
     # spatial ic: assymptotic value
-    F[1,:] .= -1.0
-    F[end,:] .= -1.0
+    if model == "phi4"
+        F[1,:] .= -1.0
+        F[end,:] .= -1.0
+    end
+    if model == "phi6"
+        F[1,:] .= 0
+        F[end,:] .= 0
+    end
+    if model == "sG"
+        F[1,:] .= 0.0
+        F[end,:] .= 0.0
+    end
 
     #---------- time evolution
     
@@ -54,7 +75,10 @@ function ff_kak(model,ff_space,ff_time,incs,out)
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) + 2*(1-F[j,n-1]^2)*F[j,n-1])*dt^2 + 2*F[j,n-1] - F[j,n-2]
             end
             if model == "phi6"
-                F[j,n] = 0
+                F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - F[j,n-1]*(1-F[j,n-1]^2)^2 + 2*(1-F[j,n-1]^2)*F[j,n-1]^3 )*dt^2 + 2*F[j,n-1] - F[j,n-2]
+            end
+            if model == "sG"
+                F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - sin(F[j,n-1]) )*dt^2 + 2*F[j,n-1] - F[j,n-2]
             end
         
             # absorbent boundary conditions
@@ -67,7 +91,7 @@ function ff_kak(model,ff_space,ff_time,incs,out)
 
     #---------- data saving
 
-    path = out*"/kak_ff_v=$(v0).jld2"
+    path = out*"/kak_ff_"*model*"_v=$(v0).jld2"
     @save path F Jarr Narr v0
     println("data saved at "*path )
 

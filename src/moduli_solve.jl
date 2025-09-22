@@ -96,3 +96,32 @@ function moduli_RK4_m2(f1,f2,incs,time,out)
     println("data saved at "*path)
 
 end
+
+### numerical integration
+#=
+using ForwardDiff
+
+function moduli_dynamics(profile,incs,time,out)
+
+    # params
+
+    space = -5000:0.01:5000
+
+    N = time[1]
+    dt = time[2]
+
+    X = [a,b]
+
+    # coefficient functions
+
+    G = ForwardDiff.gradient
+
+    e = zeros(Float64, N)
+
+    for (j,x) in enumerate(Jarr)
+        e[j] = G(X -> profile(x,X), X)
+
+    # RK4
+
+    moduli_RK4_m2(f1,f2,incs,time,out)
+=#
