@@ -2,7 +2,7 @@ using LinearAlgebra
 using JLD2
 using SpecialFunctions
 
-### import moduli equations 
+### import moduli equations # UNUSED
 
 function eq_import(path::String)
     # path : PATH : path to .txt with expression
@@ -97,9 +97,102 @@ function moduli_RK4_m2(f1,f2,incs,time,out)
 
 end
 
-### numerical integration
-#=
+### moduli equations of motion
+
 using ForwardDiff
+
+function U_kak_phi4(x::Float64, M::Vector{Float64})
+
+    a = M[1]; b = M[2]
+
+    F = tanh(x+a) - tanh(x+a) - 1 + (b/tanh(a))*(sinh(x+a)/(cosh(x+a)^2) - sinh(x-a)/(cosh(x-a)^2) )
+
+    U = 0.5*(1-F^2)^2
+
+    return U
+end
+
+function W_kak_phi4(x::Float64, M::Vector{Float64})
+    deriv = -sech(M[1]-x)^2 + sech(M[1]+x)^2 + M[2]*coth(M[1])*(-sech(M[1]-x)^3 + sech(M[1]+x)^3 + sech(M[1]-x)*tanh(M[1]-x)^2 - sech(M[1]+x)*tanh(M[1]+x)^2 )
+    W = 0.5*(deriv)^2 + U_kak_phi4(x,M)
+
+    return W
+end
+
+function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
+    
+    # FD funcs
+    Grad = ForwardDiff.gradient
+    Hess = ForwardDiff.hessian
+
+    # params
+    dx = x[2]-x[1]
+
+    # coefficient functions
+    e = zeros(Float64, length(M0),length(x))
+    H = zeros(Float64, length(M0),length(M0),length(x))
+    dW = zeros(Float64, length(m0),length(x))
+
+    for (idx,val) in enumerate(x)
+        e[:,idx] .= Grad(M -> F(val,M), M0)
+        
+        H[:,:,idx] .= Hess(M -> F(val,M), M0)
+        
+        dW[:,idx] .= Grad(M -> W(val,M), M0)
+    end
+
+    # numerical integrals
+    ddot = zeros(Float64, length(M0))
+
+    # terms
+    ee_11 = sum(e[1,:] .* e[1,:])*dx
+    ee_12 = sum(e[1,:] .* e[2,:])*dx
+    ee_21 = sum(e[2,:] .* e[1,:])*dx
+    ee_22 = sum(e[2,:] .* e[2,:])*dx
+
+    He_1 = sum(e[1,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1 + H[2,2,:]*dM0[2]*dM0[2]]) )*dx
+    He_2 = sum(e[2,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1 + H[2,2,:]*dM0[2]*dM0[2]]) )*dx
+
+    pW_1 = -sum(dW[1,:])*dx
+    pW_2 = -sum(dW[2,:])*dx
+
+    #
+
+    D1 = pW_1 - He_1
+    D2 = pW_2 - He_2
+    M = ee_11*ee_22 - ee_21*ee_12
+
+    # eqs
+    ddot[1] = (D1 - D2*ee_21/ee_22)/(ee_11-(ee_21*ee_12)/ee_22)
+    ddot[2] = D2*(1/ee_22 + ee_12*ee_21/ee_22/M) - D1*ee_12/M
+
+    return ddot
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### numerical integration
 
 function moduli_dynamics(profile,incs,time,out)
 
@@ -116,7 +209,7 @@ function moduli_dynamics(profile,incs,time,out)
 
     G = ForwardDiff.gradient
 
-    e = zeros(Float64, N)
+    e = Float64[]
 
     for (j,x) in enumerate(Jarr)
         e[j] = G(X -> profile(x,X), X)
