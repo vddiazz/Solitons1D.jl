@@ -19,9 +19,9 @@ function eq_import(path::String)
     return eq_f
 end
 
-### 4th-order Runge-Kutta
+### 4th-order Runge-Kutta (analytical)
 
-function moduli_RK4_m2(f1,f2,incs,time,out)
+function moduli_RK4_am2(f1,f2,incs,time,out)
     # eq1 : Function : ddm_1 = f1
     # eq2 : Function : ddm_2 = f2
     # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
@@ -101,7 +101,14 @@ end
 
 using ForwardDiff
 
-function U_kak_phi4(x::Float64, M::Vector{Float64})
+# MOVE TO AUX.JL
+function F_kak(x, M)
+    f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( sinh(x+M[1])/(cosh(x+M[1]))^2 - sinh(x-M[1])/(cosh(x-M[1]))^2 )
+    return f
+end
+
+# MOVE TO AUX.JL
+function U_kak_phi4(x, M)
 
     a = M[1]; b = M[2]
 
@@ -112,7 +119,8 @@ function U_kak_phi4(x::Float64, M::Vector{Float64})
     return U
 end
 
-function W_kak_phi4(x::Float64, M::Vector{Float64})
+# MOVE TO AUX.JL
+function W_kak_phi4(x, M)
     deriv = -sech(M[1]-x)^2 + sech(M[1]+x)^2 + M[2]*coth(M[1])*(-sech(M[1]-x)^3 + sech(M[1]+x)^3 + sech(M[1]-x)*tanh(M[1]-x)^2 - sech(M[1]+x)*tanh(M[1]+x)^2 )
     W = 0.5*(deriv)^2 + U_kak_phi4(x,M)
 
@@ -131,14 +139,14 @@ function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Floa
     # coefficient functions
     e = zeros(Float64, length(M0),length(x))
     H = zeros(Float64, length(M0),length(M0),length(x))
-    dW = zeros(Float64, length(m0),length(x))
+    dW = zeros(Float64, length(M0),length(x))
 
     for (idx,val) in enumerate(x)
         e[:,idx] .= Grad(M -> F(val,M), M0)
         
         H[:,:,idx] .= Hess(M -> F(val,M), M0)
         
-        dW[:,idx] .= Grad(M -> W(val,M), M0)
+        dW[:,idx] .= Grad(M -> W_kak_phi4(val,M), M0) # TAKE AS INPUT
     end
 
     # numerical integrals
@@ -150,8 +158,8 @@ function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Floa
     ee_21 = sum(e[2,:] .* e[1,:])*dx
     ee_22 = sum(e[2,:] .* e[2,:])*dx
 
-    He_1 = sum(e[1,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1 + H[2,2,:]*dM0[2]*dM0[2]]) )*dx
-    He_2 = sum(e[2,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1 + H[2,2,:]*dM0[2]*dM0[2]]) )*dx
+    He_1 = sum(e[1,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1] + H[2,2,:]*dM0[2]*dM0[2]) )*dx
+    He_2 = sum(e[2,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1] + H[2,2,:]*dM0[2]*dM0[2]) )*dx
 
     pW_1 = -sum(dW[1,:])*dx
     pW_2 = -sum(dW[2,:])*dx
@@ -167,6 +175,87 @@ function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Floa
     ddot[2] = D2*(1/ee_22 + ee_12*ee_21/ee_22/M) - D1*ee_12/M
 
     return ddot
+end
+
+# 4th-order Runge-Kutta (numerical)
+
+function moduli_RK4_nm2(incs,time,out)
+    # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
+    # out : PATH : path to output folder
+
+    # unpacking
+    N = time[1]
+    dt = time[2]
+
+    x1 = incs[1]
+    dx1 = incs[2]
+    x2 = incs[3]
+    dx2 = incs[4]
+
+    # initialization
+    l1 = Float64[]
+    ld1 = Float64[]
+    l2 = Float64[]
+    ld2 = Float64[]
+    
+    t = 0.
+    space = collect(-15:0.01:15)
+
+    #---------- RK4
+    for n in 1:1:N
+		# save data
+        push!(l1,x1)
+        push!(ld1,dx1)
+        push!(l2,x2)
+        push!(ld2,dx2)
+	
+		# compute next step
+		t = t+dt
+		
+        ddot_step_1 = m2_step(F_kak, U_kak_phi4, space, [x1,x2], [dx1,dx2])
+		k1_1 = dt*dx1
+        k1_d1 = dt*ddot_step_1[1]
+		k1_2 = dt*dx2
+        k1_d2 = dt*ddot_step_1[2]
+
+        ddot_step_2 = m2_step(F_kak, U_kak_phi4, space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+		k2_1 = dt*(dx1 + k1_d1/2.)
+        k2_d1 = dt*ddot_step_2[1]
+		k2_2 = dt*(dx2 + k1_d2/2.)
+        k2_d2 = dt*ddot_step_2[2]
+
+        ddot_step_3 = m2_step(F_kak, U_kak_phi4, space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+		k3_1 = dt*(dx1 + k2_d1/2.)
+        k3_d1 = dt*ddot_step_3[1]
+		k3_2 = dt*(dx2 + k2_d2/2.)
+        k3_d2 = dt*ddot_step_3[2]
+
+        ddot_step_4 = m2_step(F_kak, U_kak_phi4, space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+		k4_1 = dt*(dx1 + k3_d1)
+        k4_d1 = dt*ddot_step_4[1]
+		k4_2 = dt*(dx2 + k3_d2/2)
+        k4_d2 = dt*ddot_step_4[2]
+
+		x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
+		dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
+		x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
+		dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
+
+		# update variables
+		x1 = x1n
+		dx1 = dx1n
+		x2 = x2n
+		dx2 = dx2n
+	
+        println("done: t = $(round(t,digits=6))")
+    end
+
+    #----------- data saving
+
+    path = out*"kak_moduli_v=$(dx1).jld2"
+    @save path l1 ld1 l2 ld2
+    println("data saved at "*path)
+
 end
 
 
@@ -193,7 +282,7 @@ end
 
 
 ### numerical integration
-
+#=
 function moduli_dynamics(profile,incs,time,out)
 
     # params
@@ -218,3 +307,4 @@ function moduli_dynamics(profile,incs,time,out)
 
     moduli_RK4_m2(f1,f2,incs,time,out)
 =#
+

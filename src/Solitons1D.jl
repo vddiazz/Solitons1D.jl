@@ -17,6 +17,11 @@ export ff_anim
 include("moduli_solve.jl")
 export eq_import
 export moduli_RK4_m2
+export F_kak
+export U_kak_phi4
+export W_kak_phi4
+export m2_step
+export moduli_RK4_nm2
 
 include("aux.jl")
 export profile_kak_m2
