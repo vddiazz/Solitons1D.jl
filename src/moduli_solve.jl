@@ -112,7 +112,7 @@ function U_kak_phi4(x, M)
 
     a = M[1]; b = M[2]
 
-    F = tanh(x+a) - tanh(x+a) - 1 + (b/tanh(a))*(sinh(x+a)/(cosh(x+a)^2) - sinh(x-a)/(cosh(x-a)^2) )
+    F = tanh(x+a) - tanh(x-a) - 1 + (b/tanh(a))*(sinh(x+a)/(cosh(x+a)^2) - sinh(x-a)/(cosh(x-a)^2) )
 
     U = 0.5*(1-F^2)^2
 
@@ -199,7 +199,7 @@ function moduli_RK4_nm2(incs,time,out)
     ld2 = Float64[]
     
     t = 0.
-    space = collect(-15:0.01:15)
+    space = collect(-15:0.001:15)
 
     #---------- RK4
     for n in 1:1:N
@@ -252,10 +252,11 @@ function moduli_RK4_nm2(incs,time,out)
 
     #----------- data saving
 
-    path = out*"kak_moduli_v=$(dx1).jld2"
+    path = out*"/kak_moduli_v=$(incs[2]).jld2"
     @save path l1 ld1 l2 ld2
     println("data saved at "*path)
 
+    return l1,ld1,l2,ld2
 end
 
 
