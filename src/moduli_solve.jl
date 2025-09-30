@@ -199,7 +199,7 @@ function moduli_RK4_nm2(incs,time,out)
     ld2 = Float64[]
     
     t = 0.
-    space = collect(-15:0.001:15)
+    space = collect(-10:0.1:10)
 
     #---------- RK4
     for n in 1:1:N
