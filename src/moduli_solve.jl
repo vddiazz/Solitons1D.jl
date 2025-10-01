@@ -19,7 +19,7 @@ function eq_import(path::String)
     return eq_f
 end
 
-### 4th-order Runge-Kutta (analytical)
+### 4th-order Runge-Kutta (analytical) # UNUSED
 
 function moduli_RK4_am2(f1,f2,incs,time,out)
     # eq1 : Function : ddm_1 = f1
@@ -179,9 +179,14 @@ end
 
 # 4th-order Runge-Kutta (numerical)
 
-function moduli_RK4_nm2(incs,time,out)
+function moduli_RK4_nm2(incs,time,out,output_format)
     # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
     # out : PATH : path to output folder
+
+    if (output_format != "jld2") && (output_format != "npy")
+        println("invalid output data type")
+        return
+    end
 
     # unpacking
     N = time[1]
@@ -251,10 +256,20 @@ function moduli_RK4_nm2(incs,time,out)
     end
 
     #----------- data saving
+    
+    if output_format == "jld2"
+        path = out*"/kak_moduli_v=$(ld1[1]).jld2"
+        @save path l1 ld1 l2 ld2
+        println("data saved at "*path)
+    
+    elseif output_format == "npy"
+        npzwrite(out*"/a_v=$(ld1[1]).npy", l1)
+        npzwrite(out*"/da_v=$(ld1[1]).npy", ld1)
+        npzwrite(out*"/b_v=$(ld1[1]).npy", l2)
+        npzwrite(out*"/db_v=$(ld1[1]).npy", ld2)
+    end
 
-    path = out*"/kak_moduli_v=$(incs[2]).jld2"
-    @save path l1 ld1 l2 ld2
-    println("data saved at "*path)
+    println("data saved at "*out )
 
     return l1,ld1,l2,ld2
 end
