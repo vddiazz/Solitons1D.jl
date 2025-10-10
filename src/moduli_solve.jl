@@ -146,10 +146,10 @@ function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Floa
         
         H[:,:,idx] .= Hess(M -> F(val,M), M0)
         
-        dW[:,idx] .= Grad(M -> W_kak_phi4(val,M), M0) # TAKE AS INPUT
+        dW[:,idx] .= Grad(M -> W_kak_phi4(val,M), M0) # TAKE W_kak_phi4 AS INPUT
     end
 
-    # numerical integrals
+    #--- numerical integrals
     ddot = zeros(Float64, length(M0))
 
     # terms
@@ -206,6 +206,10 @@ function moduli_RK4_nm2(incs,time,out,output_format)
     t = 0.
     space = collect(-10:0.1:10)
 
+    println()
+    println("KAK collision: a0=$(x1), v0=$(dx1)")
+    println()
+
     #---------- RK4
     for n in 1:1:N
 		# save data
@@ -251,76 +255,27 @@ function moduli_RK4_nm2(incs,time,out,output_format)
 		dx1 = dx1n
 		x2 = x2n
 		dx2 = dx2n
-	
-        println("done: t = $(round(t,digits=6))")
+
+        print("\rdone: t = $(round(t,digits=6))")
     end
+
+    println()
 
     #----------- data saving
     
     if output_format == "jld2"
-        path = out*"/kak_moduli_v=$(ld1[1]).jld2"
+        path = out*"/kak_moduli_v=$(ld1[1])_dt=$(dt).jld2"
         @save path l1 ld1 l2 ld2
-        println("data saved at "*path)
-    
+  
     elseif output_format == "npy"
-        npzwrite(out*"/a_v=$(ld1[1]).npy", l1)
-        npzwrite(out*"/da_v=$(ld1[1]).npy", ld1)
-        npzwrite(out*"/b_v=$(ld1[1]).npy", l2)
-        npzwrite(out*"/db_v=$(ld1[1]).npy", ld2)
+        npzwrite(out*"/a_v=$(ld1[1])_dt=$(dt).npy", l1)
+        npzwrite(out*"/da_v=$(ld1[1])_dt=$(dt).npy", ld1)
+        npzwrite(out*"/b_v=$(ld1[1])_dt=$(dt).npy", l2)
+        npzwrite(out*"/db_v=$(ld1[1])_dt=$(dt).npy", ld2)
     end
 
-    println("data saved at "*out )
+    println()
+    println("v=$(ld1[1]): data saved at "*out )
 
     return l1,ld1,l2,ld2
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### numerical integration
-#=
-function moduli_dynamics(profile,incs,time,out)
-
-    # params
-
-    space = -5000:0.01:5000
-
-    N = time[1]
-    dt = time[2]
-
-    X = [a,b]
-
-    # coefficient functions
-
-    G = ForwardDiff.gradient
-
-    e = Float64[]
-
-    for (j,x) in enumerate(Jarr)
-        e[j] = G(X -> profile(x,X), X)
-
-    # RK4
-
-    moduli_RK4_m2(f1,f2,incs,time,out)
-=#
-
