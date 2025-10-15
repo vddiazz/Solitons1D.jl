@@ -6,10 +6,11 @@ This julia package allows for computations with 1-dimensional solitons (kinks an
 
 Current features:
 - Full field dynamics for $\phi^4$ theory.
-- Animation of KAK colissions using full field dynamics.
+- Animation of KAK colissions using full field dynamics data.
+- Moduli space dynamics for 2-moduli models.
 
 Pending features:
-- Moduli space dynamics for 2-moduli models.
+- Animation of KAK colissions using full field dynamics data.
 - Full field dynamics for sine-Gordon theory.
 - Full field dynamics for $\phi^6$ theory.
 

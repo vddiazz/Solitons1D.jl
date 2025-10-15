@@ -204,8 +204,10 @@ function moduli_RK4_nm2(incs,time,out,output_format)
     ld2 = Float64[]
     
     t = 0.
-    space = collect(-10:0.1:10)
+    space = collect(-15:0.1:15)
 
+    println()
+    println("#--------------------------------------------------#")
     println()
     println("KAK collision: a0=$(x1), v0=$(dx1)")
     println()
@@ -256,7 +258,8 @@ function moduli_RK4_nm2(incs,time,out,output_format)
 		x2 = x2n
 		dx2 = dx2n
 
-        print("\rdone: t = $(round(t,digits=6))")
+        tot = N*dt
+        print("\rdone: $(round(t/tot*100,digits=4)) %")
     end
 
     println()
@@ -276,6 +279,8 @@ function moduli_RK4_nm2(incs,time,out,output_format)
 
     println()
     println("v=$(ld1[1]): data saved at "*out )
+    println()
+    println("#--------------------------------------------------#")
 
     return l1,ld1,l2,ld2
 end
