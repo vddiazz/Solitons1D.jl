@@ -1,6 +1,8 @@
 using LinearAlgebra
 using JLD2
 using SpecialFunctions
+using ProgressMeter
+using Base.Threads
 
 ### import moduli equations # UNUSED
 
@@ -102,37 +104,44 @@ end
 using ForwardDiff
 
 # MOVE TO AUX.JL
-function F_kak(x, M)
-    f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( sinh(x+M[1])/(cosh(x+M[1]))^2 - sinh(x-M[1])/(cosh(x-M[1]))^2 )
+function F_kak(model,moduli,x, M, gamma)
+    if model == "phi4"
+        if moduli == "aB"
+            f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( sinh(x+M[1])/(cosh(x+M[1]))^2 - sinh(x-M[1])/(cosh(x-M[1]))^2 )
+        elseif moduli == "maB"
+            f = tanh(gamma*(x+M[1])) - tanh(gamma*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( sinh(gamma*(x+M[1]))/(cosh(gamma*(x+M[1])))^2 - sinh(gamma*(x-M[1]))/(cosh(gamma*(x-M[1])))^2 )
+        elseif moduli == "mpR"
+            f = tanh(gamma*(x+M[1])) - tanh(gamma*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( gamma*(x+M[1])*sech(gamma*(x+M[1]))^2 - gamma*(x-M[1])*sech(gamma*(x+M[1]))^2 )
+        end
+    end
     return f
 end
 
 # MOVE TO AUX.JL
-function U_kak_phi4(x, M)
-
-    a = M[1]; b = M[2]
-
-    F = tanh(x+a) - tanh(x-a) - 1 + (b/tanh(a))*(sinh(x+a)/(cosh(x+a)^2) - sinh(x-a)/(cosh(x-a)^2) )
-
-    U = 0.5*(1-F^2)^2
-
+function U_kak(model,moduli, x, M,gamma)
+    if model == "phi4"
+        U = 0.5*(1-F_kak(model,moduli,x,M,gamma)^2)^2
+    end
     return U
 end
 
 # MOVE TO AUX.JL
-function W_kak_phi4(x, M)
-    deriv = -sech(M[1]-x)^2 + sech(M[1]+x)^2 + M[2]*coth(M[1])*(-sech(M[1]-x)^3 + sech(M[1]+x)^3 + sech(M[1]-x)*tanh(M[1]-x)^2 - sech(M[1]+x)*tanh(M[1]+x)^2 )
-    W = 0.5*(deriv)^2 + U_kak_phi4(x,M)
+function W_kak(model,moduli,x, M,gamma)
 
+    if model == "phi4"
+        if moduli == "aB"
+            deriv = -sech(M[1]-x)^2 + sech(M[1]+x)^2 + M[2]*coth(M[1])*(-sech(M[1]-x)^3 + sech(M[1]+x)^3 + sech(M[1]-x)*tanh(M[1]-x)^2 - sech(M[1]+x)*tanh(M[1]+x)^2 )
+            W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
+        elseif moduli == "maB"
+            deriv = -gamma*sech((M[1]-x)*gamma)^2 + gamma*sech((M[1]+x)*gamma)^2 + M[2]*coth(M[1])*(-gamma*sech((M[1]-x)*gamma)^3 + gamma*sech((M[1]+x)*gamma)^3 + gamma*sech((M[1]-x)*gamma)*tanh((M[1]-x)*gamma)^2 - gamma*sech((M[1]+x)*gamma)*tanh((M[1]+x)*gamma)^2 )
+            W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
+        end
+    end
     return W
 end
 
-function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
+function m2_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
     
-    # FD funcs
-    Grad = ForwardDiff.gradient
-    Hess = ForwardDiff.hessian
-
     # params
     dx = x[2]-x[1]
 
@@ -141,12 +150,12 @@ function m2_step(F, U, x::Vector{Float64}, M0::Vector{Float64}, dM0::Vector{Floa
     H = zeros(Float64, length(M0),length(M0),length(x))
     dW = zeros(Float64, length(M0),length(x))
 
-    for (idx,val) in enumerate(x)
-        e[:,idx] .= Grad(M -> F(val,M), M0)
+    @threads for idx in 1:length(x)
+        e[:,idx] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
         
-        H[:,:,idx] .= Hess(M -> F(val,M), M0)
+        H[:,:,idx] .= ForwardDiff.hessian(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
         
-        dW[:,idx] .= Grad(M -> W_kak_phi4(val,M), M0) # TAKE W_kak_phi4 AS INPUT
+        dW[:,idx] .= ForwardDiff.gradient(M -> W_kak(model,moduli,x[idx],M,gamma), M0)
     end
 
     #--- numerical integrals
@@ -179,7 +188,7 @@ end
 
 # 4th-order Runge-Kutta (numerical)
 
-function moduli_RK4_nm2(incs,time,out,output_format)
+function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::Array{Float64},out::String,output_format::String)
     # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
     # out : PATH : path to output folder
 
@@ -196,6 +205,7 @@ function moduli_RK4_nm2(incs,time,out,output_format)
     dx1 = incs[2]
     x2 = incs[3]
     dx2 = incs[4]
+    gamma = 1/(1-incs[2]^2)
 
     # initialization
     l1 = Float64[]
@@ -209,60 +219,57 @@ function moduli_RK4_nm2(incs,time,out,output_format)
     println()
     println("#--------------------------------------------------#")
     println()
-    println("KAK collision: a0=$(x1), v0=$(dx1)")
+    println("KAK collision: a0=$(x1), v0=$(dx1), B0=$(x2), dB0=$(dx2)")
     println()
 
     #---------- RK4
-    for n in 1:1:N
-		# save data
-        push!(l1,x1)
-        push!(ld1,dx1)
-        push!(l2,x2)
-        push!(ld2,dx2)
+    @showprogress 1 "Computing..." for n in 1:1:N 
+        @inbounds @fastmath begin
+		    # save data
+            push!(l1,x1)
+            push!(ld1,dx1)
+            push!(l2,x2)
+            push!(ld2,dx2)
 	
-		# compute next step
-		t = t+dt
-		
-        ddot_step_1 = m2_step(F_kak, U_kak_phi4, space, [x1,x2], [dx1,dx2])
-		k1_1 = dt*dx1
-        k1_d1 = dt*ddot_step_1[1]
-		k1_2 = dt*dx2
-        k1_d2 = dt*ddot_step_1[2]
+            # compute next step
+            t = t+dt
+            
+            ddot_step_1 = m2_step(model,moduli,gamma,space, [x1,x2], [dx1,dx2])
+            k1_1 = dt*dx1
+            k1_d1 = dt*ddot_step_1[1]
+            k1_2 = dt*dx2
+            k1_d2 = dt*ddot_step_1[2]
 
-        ddot_step_2 = m2_step(F_kak, U_kak_phi4, space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
-		k2_1 = dt*(dx1 + k1_d1/2.)
-        k2_d1 = dt*ddot_step_2[1]
-		k2_2 = dt*(dx2 + k1_d2/2.)
-        k2_d2 = dt*ddot_step_2[2]
+            ddot_step_2 = m2_step(model,moduli,gamma, space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+            k2_1 = dt*(dx1 + k1_d1/2.)
+            k2_d1 = dt*ddot_step_2[1]
+            k2_2 = dt*(dx2 + k1_d2/2.)
+            k2_d2 = dt*ddot_step_2[2]
 
-        ddot_step_3 = m2_step(F_kak, U_kak_phi4, space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
-		k3_1 = dt*(dx1 + k2_d1/2.)
-        k3_d1 = dt*ddot_step_3[1]
-		k3_2 = dt*(dx2 + k2_d2/2.)
-        k3_d2 = dt*ddot_step_3[2]
+            ddot_step_3 = m2_step(model,moduli,gamma, space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+            k3_1 = dt*(dx1 + k2_d1/2.)
+            k3_d1 = dt*ddot_step_3[1]
+            k3_2 = dt*(dx2 + k2_d2/2.)
+            k3_d2 = dt*ddot_step_3[2]
 
-        ddot_step_4 = m2_step(F_kak, U_kak_phi4, space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
-		k4_1 = dt*(dx1 + k3_d1)
-        k4_d1 = dt*ddot_step_4[1]
-		k4_2 = dt*(dx2 + k3_d2/2)
-        k4_d2 = dt*ddot_step_4[2]
+            ddot_step_4 = m2_step(model,moduli,gamma, space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+            k4_1 = dt*(dx1 + k3_d1)
+            k4_d1 = dt*ddot_step_4[1]
+            k4_2 = dt*(dx2 + k3_d2/2)
+            k4_d2 = dt*ddot_step_4[2]
 
-		x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
-		dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
-		x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
-		dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
+            x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
+            dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
+            x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
+            dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
 
-		# update variables
-		x1 = x1n
-		dx1 = dx1n
-		x2 = x2n
-		dx2 = dx2n
-
-        tot = N*dt
-        print("\rdone: $(round(t/tot*100,digits=4)) %")
+            # update variables
+            x1 = x1n
+            dx1 = dx1n
+            x2 = x2n
+            dx2 = dx2n
+        end
     end
-
-    println()
 
     #----------- data saving
     
@@ -278,9 +285,10 @@ function moduli_RK4_nm2(incs,time,out,output_format)
     end
 
     println()
-    println("v=$(ld1[1]): data saved at "*out )
+    println("Data saved at "*out )
     println()
     println("#--------------------------------------------------#")
+    print()
 
     return l1,ld1,l2,ld2
 end

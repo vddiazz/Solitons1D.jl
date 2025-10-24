@@ -1,14 +1,20 @@
 using LinearAlgebra
 using JLD2
 using NPZ
+using ProgressMeter
 
 #---------------- kak dynamics
 
-function ff_kak(model,ff_space,ff_time,incs,out)
+function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
     # ff_space : Vector{Float64} : spatial dimension : [xi,xf,dx]
     # ff_time : Vector{Float64} : temporal dimension : [tf,dt]
     # incs : Vector{Float64} : initial conditions : [a0,v0]
     # out : PATH : path of output folder
+
+    if (output_format != "jld2") && (output_format != "npy")
+        println("invalid output data type")
+        return
+    end
 
     # unpacking
     xi = ff_space[1]
@@ -66,10 +72,15 @@ function ff_kak(model,ff_space,ff_time,incs,out)
     end
 
     #---------- time evolution
-    
-    for n in 3:1:N
+   
+    println()
+    println("#--------------------------------------------------#")
+    println()
+    println("Full field dynamics: model=$(model), v0=$(incs[2])")
+    println()
+
+    @showprogress 1 "Computing..." for n in 3:1:N
         for j in 2:1:J-1
-            
             # models
             if model == "phi4"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) + 2*(1-F[j,n-1]^2)*F[j,n-1])*dt^2 + 2*F[j,n-1] - F[j,n-2]
@@ -85,15 +96,23 @@ function ff_kak(model,ff_space,ff_time,incs,out)
             F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
             F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
         end
-
-        println("done: t = $(round(n*dt,digits=3))")
     end
 
-    #---------- data saving
+    #----------- data saving
 
-    path = out*"/kak_ff_"*model*"_v=$(v0).jld2"
-    @save path F Jarr Narr v0
-    println("data saved at "*path )
+    if output_format == "jld2"
+        path = out*"/kak_ff_v=$(v0).jld2"
+        @save path F
+
+    elseif output_format == "npy"
+        npzwrite(out*"/kak_ff_v=$(v0).npy", F)
+    end
+
+    println()
+    println("Data saved at "*out )
+    println()
+    println("#--------------------------------------------------#")
+    print()
 
 end
 
