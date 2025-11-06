@@ -133,7 +133,7 @@ function W_kak(model,moduli,x, M,gamma)
             deriv = -sech(M[1]-x)^2 + sech(M[1]+x)^2 + M[2]*coth(M[1])*(-sech(M[1]-x)^3 + sech(M[1]+x)^3 + sech(M[1]-x)*tanh(M[1]-x)^2 - sech(M[1]+x)*tanh(M[1]+x)^2 )
             W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
         elseif moduli == "maB"
-            deriv = -gamma*sech((M[1]-x)*gamma)^2 + gamma*sech((M[1]+x)*gamma)^2 + M[2]*coth(M[1])*(-gamma*sech((M[1]-x)*gamma)^3 + gamma*sech((M[1]+x)*gamma)^3 + gamma*sech((M[1]-x)*gamma)*tanh((M[1]-x)*gamma)^2 - gamma*sech((M[1]+x)*gamma)*tanh((M[1]+x)*gamma)^2 )
+            deriv = -gamma*sech((-M[1]+x)*gamma)^2 + gamma*sech((M[1]+x)*gamma)^2 + M[2]*coth(M[1])*(-gamma*sech((-M[1]+x)*gamma)^3 + gamma*sech((M[1]+x)*gamma)^3 + gamma*sech((-M[1]+x)*gamma)*tanh((-M[1]+x)*gamma)^2 - gamma*sech((M[1]+x)*gamma)*tanh((M[1]+x)*gamma)^2 )
             W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
         end
     end
@@ -205,7 +205,7 @@ function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::
     dx1 = incs[2]
     x2 = incs[3]
     dx2 = incs[4]
-    gamma = 1/(1-incs[2]^2)
+    gamma = 1/sqrt(1-incs[2]^2)
 
     # initialization
     l1 = Float64[]

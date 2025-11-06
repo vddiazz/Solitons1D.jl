@@ -4,13 +4,15 @@ Package developed by *Víctor Díaz Díaz* as part of the Ph.D. thesis *Rigorous
 
 This julia package allows for computations with 1-dimensional solitons (kinks and antikinks), both by solving the full field dynamics and solving the moduli space dynamics.
 
-Current features:
-- Full field dynamics for $\phi^4$ theory.
-- Animation of KAK colissions using full field dynamics data.
-- Moduli space dynamics for 2-moduli models.
+Full Field (FF) features:
+- Computations for $\phi^4$ theory.
+- Collision plot for $\phi^4$ theory
+
+Collective Coordinate Models (CCM) features:
+- Moduli space dynamics for Poincaré + shape modes
+- Moduli space dynamics for modified Poincaré + shape modes
 
 Pending features:
-- Animation of KAK colissions using full field dynamics data.
 - Full field dynamics for sine-Gordon theory.
 - Full field dynamics for $\phi^6$ theory.
 
