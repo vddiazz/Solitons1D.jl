@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Serialization
 using JLD2
 using SpecialFunctions
 using ProgressMeter
@@ -188,7 +189,7 @@ end
 
 # 4th-order Runge-Kutta (numerical)
 
-function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::Array{Float64},out::String,output_format::String)
+function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Float64},time::Array{Float64},out::String,output_format::String)
     # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
     # out : PATH : path to output folder
 
@@ -205,7 +206,12 @@ function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::
     dx1 = incs[2]
     x2 = incs[3]
     dx2 = incs[4]
-    gamma = 1/sqrt(1-incs[2]^2)
+    
+    if moduli == "aB" # necessary for grid selection
+        gamma = 0.
+    elseif moduli == "maB"
+        gamma = 1/sqrt(1-incs[2]^2)
+    end
 
     # initialization
     l1 = Float64[]
@@ -214,7 +220,7 @@ function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::
     ld2 = Float64[]
     
     t = 0.
-    space = collect(-15:0.1:15)
+    space = collect(-15:0.5:15) # ENSURE THAT MATCHES INPUT FOR mkgrid_nm2
 
     println()
     println("#--------------------------------------------------#")
@@ -234,29 +240,60 @@ function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::
             # compute next step
             t = t+dt
             
-            ddot_step_1 = m2_step(model,moduli,gamma,space, [x1,x2], [dx1,dx2])
-            k1_1 = dt*dx1
-            k1_d1 = dt*ddot_step_1[1]
-            k1_2 = dt*dx2
-            k1_d2 = dt*ddot_step_1[2]
+            if type == "full-res"
+                ddot_step_1 = m2_step(model,moduli,gamma,space, [x1,x2], [dx1,dx2])
+                k1_1 = dt*dx1
+                k1_d1 = dt*ddot_step_1[1]
+                k1_2 = dt*dx2
+                k1_d2 = dt*ddot_step_1[2]
 
-            ddot_step_2 = m2_step(model,moduli,gamma, space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
-            k2_1 = dt*(dx1 + k1_d1/2.)
-            k2_d1 = dt*ddot_step_2[1]
-            k2_2 = dt*(dx2 + k1_d2/2.)
-            k2_d2 = dt*ddot_step_2[2]
+                ddot_step_2 = m2_step(model,moduli,gamma, space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+                k2_1 = dt*(dx1 + k1_d1/2.)
+                k2_d1 = dt*ddot_step_2[1]
+                k2_2 = dt*(dx2 + k1_d2/2.)
+                k2_d2 = dt*ddot_step_2[2]
 
-            ddot_step_3 = m2_step(model,moduli,gamma, space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
-            k3_1 = dt*(dx1 + k2_d1/2.)
-            k3_d1 = dt*ddot_step_3[1]
-            k3_2 = dt*(dx2 + k2_d2/2.)
-            k3_d2 = dt*ddot_step_3[2]
+                ddot_step_3 = m2_step(model,moduli,gamma, space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+                k3_1 = dt*(dx1 + k2_d1/2.)
+                k3_d1 = dt*ddot_step_3[1]
+                k3_2 = dt*(dx2 + k2_d2/2.)
+                k3_d2 = dt*ddot_step_3[2]
 
-            ddot_step_4 = m2_step(model,moduli,gamma, space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
-            k4_1 = dt*(dx1 + k3_d1)
-            k4_d1 = dt*ddot_step_4[1]
-            k4_2 = dt*(dx2 + k3_d2/2)
-            k4_d2 = dt*ddot_step_4[2]
+                ddot_step_4 = m2_step(model,moduli,gamma, space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+                k4_1 = dt*(dx1 + k3_d1)
+                k4_d1 = dt*ddot_step_4[1]
+                k4_2 = dt*(dx2 + k3_d2/2)
+                k4_d2 = dt*ddot_step_4[2]
+
+            elseif type == "interp"
+                X1 = collect(-1:0.1:10)
+                X2 = collect(-1.5:0.1:1.5)
+
+                ddot_step_1 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1,x2], [dx1,dx2])
+                k1_1 = dt*dx1
+                k1_d1 = dt*ddot_step_1[1]
+                k1_2 = dt*dx2
+                k1_d2 = dt*ddot_step_1[2]
+
+                ddot_step_2 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+                k2_1 = dt*(dx1 + k1_d1/2.)
+                k2_d1 = dt*ddot_step_2[1]
+                k2_2 = dt*(dx2 + k1_d2/2.)
+                k2_d2 = dt*ddot_step_2[2]
+
+                ddot_step_3 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+                k3_1 = dt*(dx1 + k2_d1/2.)
+                k3_d1 = dt*ddot_step_3[1]
+                k3_2 = dt*(dx2 + k2_d2/2.)
+                k3_d2 = dt*ddot_step_3[2]
+
+                ddot_step_4 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+                k4_1 = dt*(dx1 + k3_d1)
+                k4_d1 = dt*ddot_step_4[1]
+                k4_2 = dt*(dx2 + k3_d2/2)
+                k4_d2 = dt*ddot_step_4[2]
+
+            end
 
             x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
             dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
@@ -292,3 +329,154 @@ function moduli_RK4_nm2(model::String,moduli::String,incs::Array{Float64},time::
 
     return l1,ld1,l2,ld2
 end
+
+### Interpolation
+
+function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
+
+    # params
+    dx = x[2]-x[1]
+
+    l1 = length(X1)
+    l2 = length(X2)
+    lx = length(x)
+
+    # coefficient grids
+    e_grid = zeros(Float64, 2,l1,l2,lx)
+    H_grid = zeros(Float64, 2,2,l1,l2,lx)
+    dW_grid = zeros(Float64, 2,l1,l2,lx)
+
+    @showprogress 1 "Computing..." for idx_1 in 1:l1 
+        for idx_2 in 1:l2
+            M0 = [X1[idx_1],X2[idx_2]]
+
+            @inbounds @fastmath for idx_x in 1:lx
+                e_grid[:,idx_1,idx_2,idx_x] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx_x],M,gamma), M0)
+                H_grid[:,:,idx_1,idx_2,idx_x] .= ForwardDiff.hessian(M -> F_kak(model,moduli,x[idx_x],M,gamma), M0)
+                dW_grid[:,idx_1,idx_2,idx_x] .= ForwardDiff.gradient(M -> W_kak(model,moduli,x[idx_x],M,gamma), M0)
+            end
+        end
+    end
+    
+    #----------- data saving
+    
+    if output_format == "jls"
+        path_e = out*"/e_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        path_H = out*"/H_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        path_dW = out*"/dW_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        
+        open(path_e, "w") do io; serialize(io, e_grid); end
+        open(path_H, "w") do io; serialize(io, H_grid); end
+        open(path_dW, "w") do io; serialize(io, dW_grid); end
+    end
+
+    println()
+    println("Data saved at "*out )
+    println()
+    println("#--------------------------------------------------#")
+    print()
+
+end
+
+function m2_step_interp(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
+    
+    #--- data
+    e_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/e_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
+    H_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/H_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
+    dW_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/dW_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
+
+    dx = x[2]-x[1]
+
+    #--- interpolation
+    l1 = length(X1)
+    l2 = length(X2)
+    lx = length(x)
+
+    e = zeros(Float64, 2,lx)
+    H = zeros(Float64, 2,2,lx)
+    dW = zeros(Float64, 2,lx)
+
+    for dir in 1:2
+        for idx_x in 1:lx
+            # find indices of cell that contains M0
+            idx1 = searchsortedlast(X1,M0[1])
+            idx2 = searchsortedlast(X2,M0[2])
+
+            # clamp to valid range
+            idx1 = clamp(idx1,1,l1-1)
+            idx2 = clamp(idx2,1,l2-1)
+
+            # cell corners
+            X1_B = X1[idx1]; X1_T = X1[idx1+1]
+            X2_B = X2[idx2]; X2_T = X2[idx2+1]
+
+            # cell corner values (single dir)
+            Q11_e = e_grid[dir,idx1,idx2,idx_x]
+            Q12_e = e_grid[dir,idx1,idx2+1,idx_x]
+            Q21_e = e_grid[dir,idx1+1,idx2,idx_x]
+            Q22_e = e_grid[dir,idx1+1,idx2+1,idx_x]
+
+            Q11_dW = dW_grid[dir,idx1,idx2,idx_x]
+            Q12_dW = dW_grid[dir,idx1,idx2+1,idx_x]
+            Q21_dW = dW_grid[dir,idx1+1,idx2,idx_x]
+            Q22_dW = dW_grid[dir,idx1+1,idx2+1,idx_x]
+
+            # bilinear interpolation (single dir)
+            D = (X1_T - X1_B)*(X2_T - X2_B)
+            
+            e[dir,idx_x] = (1/D)*( Q11_e*(X1_T - M0[1])*(X2_T - M0[2])
+                                  + Q21_e*(M0[1] - X1_B)*(X2_T - M0[2])
+                                  + Q12_e*(X1_T - M0[1])*(M0[2] - X2_B)
+                                  + Q22_e*(M0[1] - X1_B)*(M0[2] - X2_B) )
+
+            dW[dir,idx_x] = (1/D)*( Q11_dW*(X1_T - M0[1])*(X2_T - M0[2])
+                                  + Q21_dW*(M0[1] - X1_B)*(X2_T - M0[2])
+                                  + Q12_dW*(X1_T - M0[1])*(M0[2] - X2_B)
+                                  + Q22_dW*(M0[1] - X1_B)*(M0[2] - X2_B) )
+            
+            for dir2 in 1:2
+            
+                # cell corner values (double dir)
+                Q11_H = H_grid[dir,dir2,idx1,idx2,idx_x]
+                Q12_H = H_grid[dir,dir2,idx1,idx2+1,idx_x]
+                Q21_H = H_grid[dir,dir2,idx1+1,idx2,idx_x]
+                Q22_H = H_grid[dir,dir2,idx1+1,idx2+1,idx_x]
+
+                # bilinear interpolation (double dir)
+                H[dir,dir2,idx_x] = (1/D)*( Q11_H*(X1_T - M0[1])*(X2_T - M0[2])
+                                     + Q21_H*(M0[1] - X1_B)*(X2_T - M0[2])
+                                     + Q12_H*(X1_T - M0[1])*(M0[2] - X2_B)
+                                     + Q22_H*(M0[1] - X1_B)*(M0[2] - X2_B) )
+            end
+        end
+    end
+
+    #--- numerical integrals
+    ddot = zeros(Float64, length(M0))
+
+    # terms
+    ee_11 = sum(e[1,:] .* e[1,:])*dx
+    ee_12 = sum(e[1,:] .* e[2,:])*dx
+    ee_21 = sum(e[2,:] .* e[1,:])*dx
+    ee_22 = sum(e[2,:] .* e[2,:])*dx
+
+    He_1 = sum(e[1,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1] + H[2,2,:]*dM0[2]*dM0[2]) )*dx
+    He_2 = sum(e[2,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1] + H[2,2,:]*dM0[2]*dM0[2]) )*dx
+
+    pW_1 = -sum(dW[1,:])*dx
+    pW_2 = -sum(dW[2,:])*dx
+
+    #
+
+    D1 = pW_1 - He_1
+    D2 = pW_2 - He_2
+    M = ee_11*ee_22 - ee_21*ee_12
+
+    # eqs
+    ddot[1] = (D1 - D2*ee_21/ee_22)/(ee_11-(ee_21*ee_12)/ee_22)
+    ddot[2] = D2*(1/ee_22 + ee_12*ee_21/ee_22/M) - D1*ee_12/M
+
+    return ddot
+end
+
+

@@ -1,5 +1,6 @@
 module Solitons1D
 
+using Serialization
 using JLD2
 using LaTeXStrings
 using LinearAlgebra
@@ -22,6 +23,8 @@ export U_kak_phi4
 export W_kak_phi4
 export m2_step
 export moduli_RK4_nm2
+export mkgrid_m2
+export m2_step_interp
 
 include("aux.jl")
 export profile_kak_m2

@@ -7,6 +7,8 @@ using LaTeXStrings
 
 function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
 
+    # PENDING: add filetype speciffication - only works with .jld2 now
+
     # savefig check
     if savefig_bool == true
         path_to_savefig = readline()
@@ -20,7 +22,7 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
 
     # plot animation
     for (t,tval) in enumerate(Narr[3:end])
-        if t%20 == 0
+        if t%200 == 0
             plt = plot(Jarr,F[:,t],
                        xlabel=L"x",
                        ylabel=L"\Phi_{\mathrm{KAK}}(x)",

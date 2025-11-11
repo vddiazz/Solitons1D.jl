@@ -11,6 +11,8 @@ function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
     # incs : Vector{Float64} : initial conditions : [a0,v0]
     # out : PATH : path of output folder
 
+    # PENDING: Does not work with sG
+
     if (output_format != "jld2") && (output_format != "npy")
         println("invalid output data type")
         return
@@ -47,7 +49,7 @@ function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
             F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 # field
             F[j,2] = F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 + (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt ) # derivative
         end
-        if model == "phi6"
+        if model == "phi6" # PENDING
             F[j,1] = 0
             F[j,2] = F[j,1] + 0
         end
@@ -62,7 +64,7 @@ function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
         F[1,:] .= -1.0
         F[end,:] .= -1.0
     end
-    if model == "phi6"
+    if model == "phi6" # PENDING
         F[1,:] .= 0
         F[end,:] .= 0
     end
@@ -101,11 +103,11 @@ function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
     #----------- data saving
 
     if output_format == "jld2"
-        path = out*"/kak_ff_v=$(v0).jld2"
-        @save path F
+        path = out*"/kak_ff_$(model)_v=$(v0).jld2"
+        @save path F Jarr Narr v0
 
     elseif output_format == "npy"
-        npzwrite(out*"/kak_ff_v=$(v0).npy", F)
+        npzwrite(out*"/kak_ff_$(model)_v=$(v0).npy", F)
     end
 
     println()
