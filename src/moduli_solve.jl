@@ -220,7 +220,7 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
     ld2 = Float64[]
     
     t = 0.
-    space = collect(-15:0.5:15) # ENSURE THAT MATCHES INPUT FOR mkgrid_nm2
+    space = collect(-15:0.1:15) # ENSURE THAT MATCHES INPUT FOR mkgrid_nm2
 
     println()
     println("#--------------------------------------------------#")
@@ -332,7 +332,7 @@ end
 
 ### Interpolation
 
-function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
+function mkgrid_m2_pre(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
 
     # params
     dx = x[2]-x[1]
@@ -378,7 +378,7 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
 
 end
 
-function m2_step_interp(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
+function m2_step_interp_pre(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
     
     #--- data
     e_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/e_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
@@ -397,7 +397,7 @@ function m2_step_interp(model::String,moduli::String,gamma::Float64,X1::Array{Fl
     dW = zeros(Float64, 2,lx)
 
     for dir in 1:2
-        for idx_x in 1:lx
+        @inbounds @fastmath for idx_x in 1:lx
             # find indices of cell that contains M0
             idx1 = searchsortedlast(X1,M0[1])
             idx2 = searchsortedlast(X2,M0[2])
@@ -434,8 +434,7 @@ function m2_step_interp(model::String,moduli::String,gamma::Float64,X1::Array{Fl
                                   + Q12_dW*(X1_T - M0[1])*(M0[2] - X2_B)
                                   + Q22_dW*(M0[1] - X1_B)*(M0[2] - X2_B) )
             
-            for dir2 in 1:2
-            
+            @inbounds @fastmath for dir2 in 1:2
                 # cell corner values (double dir)
                 Q11_H = H_grid[dir,dir2,idx1,idx2,idx_x]
                 Q12_H = H_grid[dir,dir2,idx1,idx2+1,idx_x]
@@ -477,6 +476,102 @@ function m2_step_interp(model::String,moduli::String,gamma::Float64,X1::Array{Fl
     ddot[2] = D2*(1/ee_22 + ee_12*ee_21/ee_22/M) - D1*ee_12/M
 
     return ddot
+end
+
+### moduli grid nterpolation
+
+function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
+
+    # params
+    dx = x[2]-x[1]
+
+    l1 = length(X1)
+    l2 = length(X2)
+    lx = length(x)
+
+    # coefficient grids
+    ChS = zeros(Float64, 2,2,2,l1,l2) # nº of indices, nº of inputs
+    gpV = zeros(Float64, 2,l1,l2)
+
+    e = zeros(Float64, 2,lx)
+    H = zeros(Float64, 2,2,lx)
+    dW = zeros(Float64, 2,lx)
+
+    @showprogress 1 "Computing..." for idx1 in 1:l1
+        @inbounds @fastmath for idx2 in 1:l2, idx in 1:lx
+            M0 = [X1[idx1], X2[idx2]]
+
+            e[:,idx] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
+            H[:,:,idx] .= ForwardDiff.hessian(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
+            dW[:,idx] .= ForwardDiff.gradient(M -> W_kak(model,moduli,x[idx],M,gamma), M0)
+    
+            #--- numerical integrals
+    
+            g_11 = sum(e[1,:] .* e[1,:])*dx
+            g_12 = sum(e[1,:] .* e[2,:])*dx
+            g_21 = sum(e[2,:] .* e[1,:])*dx
+            g_22 = sum(e[2,:] .* e[2,:])*dx
+
+            # contravariant metric
+            det_g = g_11*g_22-g_12*g_21
+            gc_11 = g_22/det_g
+            gc_12 = -g_21/det_g
+            gc_21 = -g_12/det_g
+            gc_22 = g_11/det_g
+
+            # Levi-Civita connection
+            C_1_11 = gc_11*sum(e[1,:]*H[1,1,:])*dx + gc_12*sum(e[2,:]*H[1,1,:])*dx
+            C_1_12 = gc_11*sum(e[1,:]*H[1,2,:])*dx + gc_12*sum(e[2,:]*H[1,2,:])*dx
+            C_1_21 = gc_11*sum(e[1,:]*H[2,1,:])*dx + gc_12*sum(e[2,:]*H[2,1,:])*dx
+            C_1_22 = gc_11*sum(e[1,:]*H[2,2,:])*dx + gc_12*sum(e[2,:]*H[2,2,:])*dx
+
+            C_2_11 = gc_21*sum(e[1,:]*H[1,1,:])*dx + gc_22*sum(e[2,:]*H[1,1,:])*dx
+            C_2_12 = gc_21*sum(e[1,:]*H[1,2,:])*dx + gc_22*sum(e[2,:]*H[1,2,:])*dx
+            C_2_21 = gc_21*sum(e[1,:]*H[2,1,:])*dx + gc_22*sum(e[2,:]*H[2,1,:])*dx
+            C_2_22 = gc_21*sum(e[1,:]*H[2,2,:])*dx + gc_22*sum(e[2,:]*H[2,2,:])*dx 
+
+            # contravariant derivative of potential
+            dV_1 = sum(dW[1,:])*dx
+            dV_2 = sum(dW[2,:])*dx
+
+            dcV_1 = gc_11*dV_1 + gc_12*dV_2
+            dcV_2 = gc_21*dV_1 + gc_22*dV_2
+
+            # return 
+            ChS[1,1,1,idx1,idx2] = C_1_11
+            ChS[1,1,2,idx1,idx2] = C_1_12
+            ChS[1,2,1,idx1,idx2] = C_1_21
+            Chs[1,2,2,idx1,idx2] = C_1_22
+
+            ChS[2,1,1,idx1,idx2] = C_2_11
+            ChS[2,1,2,idx1,idx2] = C_2_12
+            ChS[2,2,1,idx1,idx2] = C_2_21
+            Chs[2,2,2,idx1,idx2] = C_2_22
+
+            gpV[1,idx1,idx2] = dcV_1
+            gpV[2,idx1,idx2] = dcV_2
+
+        end
+    end
+    
+    #----------- data saving
+    
+    if output_format == "jls"
+        path_c = out*"/Ch_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        path_v = out*"/dV_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        
+        open(path_c, "w") do io; serialize(io, ChS); end
+        open(path_v, "w") do io; serialize(io, gpV); end
+    elseif output_format == "npy"
+        # etc
+    end
+
+    println()
+    println("Data saved at "*out )
+    println()
+    println("#--------------------------------------------------#")
+    print()
+
 end
 
 
