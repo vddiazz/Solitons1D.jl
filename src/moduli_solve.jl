@@ -4,6 +4,7 @@ using JLD2
 using SpecialFunctions
 using ProgressMeter
 using Base.Threads
+using LoopVectorization
 
 ### import moduli equations # UNUSED
 
@@ -218,9 +219,21 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
     ld1 = Float64[]
     l2 = Float64[]
     ld2 = Float64[]
+
+    if type == "interp"
+        #=
+        Ch_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/Ch_model=$(model)_moduli=$(moduli).jls") do io; deserialize(io); end
+        gpV_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/gpV_model=$(model)_moduli=$(moduli).jls") do io; deserialize(io); end
+        =#
+        Ch_grid = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/Ch_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy")
+        dV_grid = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/dV_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy")
+    
+        X1 = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/X1_model=$(model)_moduli=$(moduli).npy")
+        X2 = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/X2_model=$(model)_moduli=$(moduli).npy")
+    end
     
     t = 0.
-    space = collect(-15:0.1:15) # ENSURE THAT MATCHES INPUT FOR mkgrid_nm2
+    space = collect(-15:0.1:15)
 
     println()
     println("#--------------------------------------------------#")
@@ -241,7 +254,7 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
             t = t+dt
             
             if type == "full-res"
-                ddot_step_1 = m2_step(model,moduli,gamma,space, [x1,x2], [dx1,dx2])
+                ddot_step_1 = m2_step(model,moduli,gamma, space, [x1,x2], [dx1,dx2])
                 k1_1 = dt*dx1
                 k1_d1 = dt*ddot_step_1[1]
                 k1_2 = dt*dx2
@@ -266,28 +279,25 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
                 k4_d2 = dt*ddot_step_4[2]
 
             elseif type == "interp"
-                X1 = collect(-1:0.1:10)
-                X2 = collect(-1.5:0.1:1.5)
-
-                ddot_step_1 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1,x2], [dx1,dx2])
+                ddot_step_1 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1,x2], [dx1,dx2])
                 k1_1 = dt*dx1
                 k1_d1 = dt*ddot_step_1[1]
                 k1_2 = dt*dx2
                 k1_d2 = dt*ddot_step_1[2]
 
-                ddot_step_2 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+                ddot_step_2 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
                 k2_1 = dt*(dx1 + k1_d1/2.)
                 k2_d1 = dt*ddot_step_2[1]
                 k2_2 = dt*(dx2 + k1_d2/2.)
                 k2_d2 = dt*ddot_step_2[2]
 
-                ddot_step_3 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+                ddot_step_3 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
                 k3_1 = dt*(dx1 + k2_d1/2.)
                 k3_d1 = dt*ddot_step_3[1]
                 k3_2 = dt*(dx2 + k2_d2/2.)
                 k3_d2 = dt*ddot_step_3[2]
 
-                ddot_step_4 = m2_step_interp(model,moduli,gamma,X1,X2,space, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+                ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
                 k4_1 = dt*(dx1 + k3_d1)
                 k4_d1 = dt*ddot_step_4[1]
                 k4_2 = dt*(dx2 + k3_d2/2)
@@ -331,7 +341,7 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
 end
 
 ### Interpolation
-
+#=
 function mkgrid_m2_pre(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
 
     # params
@@ -477,7 +487,7 @@ function m2_step_interp_pre(model::String,moduli::String,gamma::Float64,X1::Arra
 
     return ddot
 end
-
+=#
 ### moduli grid interpolation
 
 function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
@@ -620,10 +630,10 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
         open(path_gc, "w") do io; serialize(io, gc); end
         
     elseif output_format == "npy"
-        npzwrite(out*"/Ch_model=$(model)_moduli=$(moduli).npy", ChS)
-        npzwrite(out*"/dV_model=$(model)_moduli=$(moduli).npy", gpV)
-        npzwrite(out*"/g_model=$(model)_moduli=$(moduli).npy", g)
-        npzwrite(out*"/gc_model=$(model)_moduli=$(moduli).npy", gc)
+        npzwrite(out*"/Ch_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy", ChS)
+        npzwrite(out*"/dV_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy", gpV)
+        npzwrite(out*"/g_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy", g)
+        npzwrite(out*"/gc_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy", gc)
 
     end
 
@@ -633,4 +643,53 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
     println("#--------------------------------------------------#")
     println()
 
+end
+
+function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Array{Float64},X2::Array{Float64},M0::Vector{Float64}, dM0::Vector{Float64})
+    
+    #--- interpolation
+    l1 = length(X1)
+    l2 = length(X2)
+
+    Ch_itp = zeros(Float64, 2,2,2)
+    dV_itp = zeros(Float64, 2)
+
+    # find indices of cell that contains M0
+    idx1 = searchsortedlast(X1,M0[1])
+    idx2 = searchsortedlast(X2,M0[2]) 
+
+    # cell corners
+    X1_B = X1[idx1]; X1_T = X1[idx1+1]
+    X2_B = X2[idx2]; X2_T = X2[idx2+1]
+    t = (M0[1] - X1_B)/(X1_T - X1_B)
+    u = (M0[2] - X2_B)/(X2_T - X2_B)
+    
+    @tturbo for k in 1:2, j in 1:2, i in 1:2
+        # cell corner values
+        Q11 = Ch_grid[i,j,k,idx1,idx2]
+        Q12 = Ch_grid[i,j,k,idx1,idx2+1]
+        Q21 = Ch_grid[i,j,k,idx1+1,idx2]
+        Q22 = Ch_grid[i,j,k,idx1+1,idx2+1]
+
+        # bilinear interpolation        
+        Ch_itp[i,j,k] = (1-t)*(1-u)*Q11 + (1-t)*u*Q12 + t*(1-u)*Q21 + t*u*Q22
+    end
+
+    @tturbo for i in 1:2
+        # cell corner values (dV)
+        Q11 = dV_grid[i,idx1,idx2]
+        Q12 = dV_grid[i,idx1,idx2+1]
+        Q21 = dV_grid[i,idx1+1,idx2]
+        Q22 = dV_grid[i,idx1+1,idx2+1]
+
+        dV_itp[i] = (1-t)*(1-u)*Q11 + (1-t)*u*Q12 + t*(1-u)*Q21 + t*u*Q22
+    
+    end
+
+    #----- coefficients
+
+    i1 = -( Ch_itp[1,1,1]*dM0[1]*dM0[1] + Ch_itp[1,1,2]*dM0[1]*dM0[2] + Ch_itp[1,2,1]*dM0[2]*dM0[1] + Ch_itp[1,2,2]*dM0[2]*dM0[2] ) - dV_itp[1]
+    i2 = -( Ch_itp[2,1,1]*dM0[1]*dM0[1] + Ch_itp[2,1,2]*dM0[1]*dM0[2] + Ch_itp[2,2,1]*dM0[2]*dM0[1] + Ch_itp[2,2,2]*dM0[2]*dM0[2] ) - dV_itp[2]
+
+    return [i1,i2]
 end
