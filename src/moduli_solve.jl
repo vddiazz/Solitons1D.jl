@@ -478,7 +478,7 @@ function m2_step_interp_pre(model::String,moduli::String,gamma::Float64,X1::Arra
     return ddot
 end
 
-### moduli grid nterpolation
+### moduli grid interpolation
 
 function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
 
@@ -490,14 +490,22 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
     lx = length(x)
 
     # coefficient grids
-    ChS = zeros(Float64, 2,2,2,l1,l2) # nº of indices, nº of inputs
+    ChS = zeros(Float64, 2,2,2,l1,l2) # (nº of indices, nº of moduli)
     gpV = zeros(Float64, 2,l1,l2)
+    g = zeros(Float64, 2,2,l1,l2)
+    gc = zeros(Float64, 2,2,l1,l2)
 
     e = zeros(Float64, 2,lx)
     H = zeros(Float64, 2,2,lx)
     dW = zeros(Float64, 2,lx)
 
-    @showprogress 1 "Computing..." for idx1 in 1:l1
+    println()
+    println("#--------------------------------------------------#")
+    println()
+    println("e.o.m. coefficients grid")
+    println()
+    
+    @showprogress 1 "Computing grid..." for idx1 in 1:l1
         @inbounds @fastmath for idx2 in 1:l2, idx in 1:lx
             M0 = [X1[idx1], X2[idx2]]
 
@@ -520,15 +528,15 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
             gc_22 = g_11/det_g
 
             # Levi-Civita connection
-            C_1_11 = gc_11*sum(e[1,:]*H[1,1,:])*dx + gc_12*sum(e[2,:]*H[1,1,:])*dx
-            C_1_12 = gc_11*sum(e[1,:]*H[1,2,:])*dx + gc_12*sum(e[2,:]*H[1,2,:])*dx
-            C_1_21 = gc_11*sum(e[1,:]*H[2,1,:])*dx + gc_12*sum(e[2,:]*H[2,1,:])*dx
-            C_1_22 = gc_11*sum(e[1,:]*H[2,2,:])*dx + gc_12*sum(e[2,:]*H[2,2,:])*dx
+            C_1_11 = gc_11*sum(e[1,:].*H[1,1,:])*dx + gc_12*sum(e[2,:].*H[1,1,:])*dx
+            C_1_12 = gc_11*sum(e[1,:].*H[1,2,:])*dx + gc_12*sum(e[2,:].*H[1,2,:])*dx
+            C_1_21 = gc_11*sum(e[1,:].*H[2,1,:])*dx + gc_12*sum(e[2,:].*H[2,1,:])*dx
+            C_1_22 = gc_11*sum(e[1,:].*H[2,2,:])*dx + gc_12*sum(e[2,:].*H[2,2,:])*dx
 
-            C_2_11 = gc_21*sum(e[1,:]*H[1,1,:])*dx + gc_22*sum(e[2,:]*H[1,1,:])*dx
-            C_2_12 = gc_21*sum(e[1,:]*H[1,2,:])*dx + gc_22*sum(e[2,:]*H[1,2,:])*dx
-            C_2_21 = gc_21*sum(e[1,:]*H[2,1,:])*dx + gc_22*sum(e[2,:]*H[2,1,:])*dx
-            C_2_22 = gc_21*sum(e[1,:]*H[2,2,:])*dx + gc_22*sum(e[2,:]*H[2,2,:])*dx 
+            C_2_11 = gc_21*sum(e[1,:].*H[1,1,:])*dx + gc_22*sum(e[2,:].*H[1,1,:])*dx
+            C_2_12 = gc_21*sum(e[1,:].*H[1,2,:])*dx + gc_22*sum(e[2,:].*H[1,2,:])*dx
+            C_2_21 = gc_21*sum(e[1,:].*H[2,1,:])*dx + gc_22*sum(e[2,:].*H[2,1,:])*dx
+            C_2_22 = gc_21*sum(e[1,:].*H[2,2,:])*dx + gc_22*sum(e[2,:].*H[2,2,:])*dx 
 
             # contravariant derivative of potential
             dV_1 = sum(dW[1,:])*dx
@@ -541,37 +549,88 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
             ChS[1,1,1,idx1,idx2] = C_1_11
             ChS[1,1,2,idx1,idx2] = C_1_12
             ChS[1,2,1,idx1,idx2] = C_1_21
-            Chs[1,2,2,idx1,idx2] = C_1_22
+            ChS[1,2,2,idx1,idx2] = C_1_22
 
             ChS[2,1,1,idx1,idx2] = C_2_11
             ChS[2,1,2,idx1,idx2] = C_2_12
             ChS[2,2,1,idx1,idx2] = C_2_21
-            Chs[2,2,2,idx1,idx2] = C_2_22
+            ChS[2,2,2,idx1,idx2] = C_2_22
 
             gpV[1,idx1,idx2] = dcV_1
             gpV[2,idx1,idx2] = dcV_2
 
+            g[1,1,idx1,idx2] = g_11
+            g[1,2,idx1,idx2] = g_12
+            g[2,1,idx1,idx2] = g_21
+            g[2,2,idx1,idx2] = g_22
+
+            gc[1,1,idx1,idx2] = gc_11
+            gc[1,2,idx1,idx2] = gc_12
+            gc[2,1,idx1,idx2] = gc_21
+            gc[2,2,idx1,idx2] = gc_22
+
         end
     end
-    
+   
+    #---------- point interpolation at X_1 = 0
+
+    bad = findall(isnan, g[1,1,:,1])
+
+    @showprogress 1 "Fixing nan values..." for bad_idx in bad
+        xs = [X1[bad_idx-2],X1[bad_idx-1],X1[bad_idx+1]]
+
+        @inbounds @fastmath for idx2 in 1:l2    
+            ys_ChS_1_11 = [ChS[1,1,1,bad_idx-2,idx2],ChS[1,1,1,bad_idx-1,idx2],ChS[1,1,1,bad_idx+1,idx2]]
+            ys_ChS_1_12 = [ChS[1,1,2,bad_idx-2,idx2],ChS[1,1,2,bad_idx-1,idx2],ChS[1,1,2,bad_idx+1,idx2]]
+            ys_ChS_1_21 = [ChS[1,2,1,bad_idx-2,idx2],ChS[1,2,1,bad_idx-1,idx2],ChS[1,2,1,bad_idx+1,idx2]]
+            ys_ChS_1_22 = [ChS[1,2,2,bad_idx-2,idx2],ChS[1,2,2,bad_idx-1,idx2],ChS[1,2,2,bad_idx+1,idx2]]
+            ys_ChS_2_11 = [ChS[2,1,1,bad_idx-2,idx2],ChS[2,1,1,bad_idx-1,idx2],ChS[2,1,1,bad_idx+1,idx2]]
+            ys_ChS_2_12 = [ChS[2,1,2,bad_idx-2,idx2],ChS[2,1,2,bad_idx-1,idx2],ChS[2,1,2,bad_idx+1,idx2]]
+            ys_ChS_2_21 = [ChS[2,2,1,bad_idx-2,idx2],ChS[2,2,1,bad_idx-1,idx2],ChS[2,2,1,bad_idx+1,idx2]]
+            ys_ChS_2_22 = [ChS[2,2,2,bad_idx-2,idx2],ChS[2,2,2,bad_idx-1,idx2],ChS[2,2,2,bad_idx+1,idx2]]
+            
+            ys_gpV_1 = [gpV[1,bad_idx-2,idx2],gpV[1,bad_idx-1,idx2],gpV[1,bad_idx+1,idx2]]
+            ys_gpV_2 = [gpV[2,bad_idx-2,idx2],gpV[2,bad_idx-1,idx2],gpV[2,bad_idx+1,idx2]]
+
+            ChS[1,1,1,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_1_11)
+            ChS[1,1,2,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_1_12)
+            ChS[1,2,1,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_1_21)
+            ChS[1,2,2,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_1_22)
+            ChS[2,1,1,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_2_11)
+            ChS[2,1,2,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_2_12)
+            ChS[2,2,1,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_2_21)
+            ChS[2,2,2,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_ChS_2_22)
+
+            gpV[1,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_gpV_1)
+            gpV[2,bad_idx,idx2] = lip(2,X1[bad_idx],xs,ys_gpV_2)
+        end
+    end
+
     #----------- data saving
     
     if output_format == "jls"
-        path_c = out*"/Ch_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
-        path_v = out*"/dV_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
-        
+        path_c = out*"/Ch_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        path_v = out*"/dV_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        path_g = out*"/g_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+        path_gc = out*"/gc_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
+
         open(path_c, "w") do io; serialize(io, ChS); end
         open(path_v, "w") do io; serialize(io, gpV); end
+        open(path_g, "w") do io; serialize(io, g); end
+        open(path_gc, "w") do io; serialize(io, gc); end
+        
     elseif output_format == "npy"
-        # etc
+        npzwrite(out*"/Ch_model=$(model)_moduli=$(moduli).npy", ChS)
+        npzwrite(out*"/dV_model=$(model)_moduli=$(moduli).npy", gpV)
+        npzwrite(out*"/g_model=$(model)_moduli=$(moduli).npy", g)
+        npzwrite(out*"/gc_model=$(model)_moduli=$(moduli).npy", gc)
+
     end
 
     println()
     println("Data saved at "*out )
     println()
     println("#--------------------------------------------------#")
-    print()
+    println()
 
 end
-
-
