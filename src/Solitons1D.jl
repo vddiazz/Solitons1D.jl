@@ -25,10 +25,16 @@ export m2_step
 export moduli_RK4_nm2
 export mkgrid_m2
 export m2_step_interp
+export FAST_moduli_RK4_nm2
 
 include("aux.jl")
 export profile_kak_m2
 export energy_m2
+
+include("aux_interp.jl")
 export lip
+export spline_1d
+export spline_eval
+export spline_2d
 
 end

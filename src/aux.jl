@@ -2,6 +2,7 @@ using LinearAlgebra
 using JLD2
 using Plots
 using SpecialFunctions
+using LoopVectorization
 
 #-------------------- moduli kak field
 
@@ -61,34 +62,3 @@ function energy_m2(field_m,field,field_p,out)
 
     return E
 end
-
-#-------------------- Lagrange interpolation
-
-function lip(degree::Int64, x::Float64, xs::Array{Float64}, ys::Array{Float64})::Float64
-
-    lx = length(xs)
-    ly = length(ys)
-
-    @assert lx == ly "xs and ys must have same length"
-
-    P = 0
-    for j in 1:degree+1
-        lj = 1.0
-        for m in 1:degree+1
-            if m == j
-                continue
-            end
-            denom = xs[j] - xs[m]
-            lj = lj*(x-xs[m])/denom
-         end
-         P = P + ys[j]*lj
-    end
-
-    return P
-end
-
-
-
-    
-
-

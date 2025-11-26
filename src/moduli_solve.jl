@@ -514,10 +514,12 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
     println()
     println("e.o.m. coefficients grid")
     println()
-    
+   
+    M0 = zeros(Float64, 2)
+
     @showprogress 1 "Computing grid..." for idx1 in 1:l1
         @inbounds @fastmath for idx2 in 1:l2, idx in 1:lx
-            M0 = [X1[idx1], X2[idx2]]
+            M0[1] = X1[idx1]; M0[2] = X2[idx2]
 
             e[:,idx] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
             H[:,:,idx] .= ForwardDiff.hessian(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
@@ -645,7 +647,7 @@ function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64
 
 end
 
-function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Array{Float64},X2::Array{Float64},M0::Vector{Float64}, dM0::Vector{Float64})
+function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Array{Float64},X2::Array{Float64},M0::Array{Float64}, dM0::Array{Float64})
     
     #--- interpolation
     l1 = length(X1)
@@ -654,6 +656,8 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     Ch_itp = zeros(Float64, 2,2,2)
     dV_itp = zeros(Float64, 2)
 
+    #----- quadratic interpolation
+    
     # find indices of cell that contains M0
     idx1 = searchsortedlast(X1,M0[1])
     idx2 = searchsortedlast(X2,M0[2]) 
@@ -685,7 +689,16 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
         dV_itp[i] = (1-t)*(1-u)*Q11 + (1-t)*u*Q12 + t*(1-u)*Q21 + t*u*Q22
     
     end
-
+    
+    #----- spline interpolation
+    #=
+    @inbounds @fastmath for i in 1:2 
+        dV_itp[i] = spline_2d(X1,X2,dV_grid[i,:,:],M0)
+        @inbounds @fastmath for k in 1:2, j in 1:2
+            Ch_itp[i,j,k] = spline_2d(X1,X2,Ch_grid[i,j,k,:,:],M0)
+        end
+    end
+    =#
     #----- coefficients
 
     i1 = -( Ch_itp[1,1,1]*dM0[1]*dM0[1] + Ch_itp[1,1,2]*dM0[1]*dM0[2] + Ch_itp[1,2,1]*dM0[2]*dM0[1] + Ch_itp[1,2,2]*dM0[2]*dM0[2] ) - dV_itp[1]
@@ -693,3 +706,97 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
 
     return [i1,i2]
 end
+
+function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Array{Float64},X2::Array{Float64},model::String,moduli::String,incs::Array{Float64},time::Array{Float64},out::String,output_format::String)
+    # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
+    # out : PATH : path to output folder
+
+    if (output_format != "jld2") && (output_format != "npy")
+        println("invalid output data type")
+        return
+    end
+
+    # unpacking
+    N = time[1]
+    dt = time[2]
+
+    x1 = incs[1]
+    dx1 = incs[2]
+    x2 = incs[3]
+    dx2 = incs[4]
+    
+    # initialization
+    l1 = Float64[]
+    ld1 = Float64[]
+    l2 = Float64[]
+    ld2 = Float64[]
+
+    t = 0.
+
+    #---------- RK4
+    @inbounds @fastmath for n in 1:1:N 
+        # save data
+        push!(l1,x1)
+        push!(ld1,dx1)
+        push!(l2,x2)
+        push!(ld2,dx2)
+	
+        # compute next step
+        t = t+dt
+            
+        ddot_step_1 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1,x2], [dx1,dx2])
+        k1_1 = dt*dx1
+        k1_d1 = dt*ddot_step_1[1]
+        k1_2 = dt*dx2
+        k1_d2 = dt*ddot_step_1[2]
+
+        ddot_step_2 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+        k2_1 = dt*(dx1 + k1_d1/2.)
+        k2_d1 = dt*ddot_step_2[1]
+        k2_2 = dt*(dx2 + k1_d2/2.)
+        k2_d2 = dt*ddot_step_2[2]
+
+        ddot_step_3 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+        k3_1 = dt*(dx1 + k2_d1/2.)
+        k3_d1 = dt*ddot_step_3[1]
+        k3_2 = dt*(dx2 + k2_d2/2.)
+        k3_d2 = dt*ddot_step_3[2]
+
+        ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+        k4_1 = dt*(dx1 + k3_d1)
+        k4_d1 = dt*ddot_step_4[1]
+        k4_2 = dt*(dx2 + k3_d2/2)
+        k4_d2 = dt*ddot_step_4[2]
+
+        # compute new variables
+            
+        x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
+        dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
+        x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
+        dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
+
+        # update variables
+        x1 = x1n
+        dx1 = dx1n
+        x2 = x2n
+        dx2 = dx2n
+        
+    end
+
+    #----------- data saving
+    
+    if output_format == "jld2"
+        path = out*"/kak_moduli_v=$(ld1[1])_dt=$(dt).jld2"
+        @save path l1 ld1 l2 ld2
+  
+    elseif output_format == "npy"
+        npzwrite(out*"/a_v=$(ld1[1])_dt=$(dt).npy", l1)
+        npzwrite(out*"/da_v=$(ld1[1])_dt=$(dt).npy", ld1)
+        npzwrite(out*"/b_v=$(ld1[1])_dt=$(dt).npy", l2)
+        npzwrite(out*"/db_v=$(ld1[1])_dt=$(dt).npy", ld2)
+    end
+
+    return l1,ld1,l2,ld2
+end
+
+    
