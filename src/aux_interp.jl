@@ -81,7 +81,7 @@ function spline_2d(X1::Array{Float64}, X2::Array{Float64}, coef::Array{Float64},
     M1 = M0[1]; M2 = M0[2]
 
     l2 = length(X2)
-    g = zeros(l2)
+    g = zeros(Float64, l2)
 
     # spline in X1 for each column j
     @inbounds @fastmath for j in 1:l2
