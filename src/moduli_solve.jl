@@ -656,8 +656,8 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     Ch_itp = zeros(Float64, 2,2,2)
     dV_itp = zeros(Float64, 2)
 
-    #----- quadratic interpolation
-    
+    #----- bilinear interpolation
+    #= 
     # find indices of cell that contains M0
     idx1 = searchsortedlast(X1,M0[1])
     idx2 = searchsortedlast(X2,M0[2]) 
@@ -693,7 +693,64 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
         dV_itp[i] = (1-t)*(1-u)*Q11 + (1-t)*u*Q12 + t*(1-u)*Q21 + t*u*Q22
     
     end
+    =#
+    #----- quadratic interpolation
+
+    M1 = M0[1]; M2= M0[2]
+
+    idx1 = searchsortedlast(X1, M1)
+    idx2 = searchsortedlast(X2, M2)
+
+    idx1 = clamp.(idx1-1:idx1+1, 1,l1)
+    idx2 = clamp.(idx2-1:idx2+1, 1,l2)
+
+    g = zeros(Float64, 3)
+
+    @inbounds @fastmath for i in 1:2
+        dV = dV_grid[i,:,:]
+
+        @tturbo for l in 1:3
+            L0 = ((M1-X1[idx1[2]])*(M1-X1[idx1[3]]))/((X1[idx1[1]]-X1[idx1[2]])*(X1[idx1[1]]-X1[idx1[3]]))
+            L1 = ((M1-X1[idx1[1]])*(M1-X1[idx1[3]]))/((X1[idx1[2]]-X1[idx1[1]])*(X1[idx1[2]]-X1[idx1[3]]))
+            L2 = ((M1-X1[idx1[1]])*(M1-X1[idx1[2]]))/((X1[idx1[3]]-X1[idx1[1]])*(X1[idx1[3]]-X1[idx1[2]]))
+
+            # interpolation along X1
+            g[l] = dV[idx1[1],idx2[l]]*L0 + dV[idx1[2],idx2[l]]*L1 + dV[idx1[3],idx2[l]]*L2
+        end
+
+        # interpolation along X2 
+        L0 = ((M2-X2[idx2[2]])*(M2-X2[idx2[3]]))/((X2[idx2[1]]-X2[idx2[2]])*(X2[idx2[1]]-X2[idx2[3]]))
+        L1 = ((M2-X2[idx2[1]])*(M2-X2[idx2[3]]))/((X2[idx2[2]]-X2[idx2[1]])*(X2[idx2[2]]-X2[idx2[3]]))
+        L2 = ((M2-X2[idx2[1]])*(M2-X2[idx2[2]]))/((X2[idx2[3]]-X2[idx2[1]])*(X2[idx2[3]]-X2[idx2[2]]))
+
+        #
+        
+        dV_itp[i] = g[1]*L0 + g[2]*L1 + g[3]*L2
+
+        @inbounds @fastmath for k in 1:2, j in 1:2
+            Ch = Ch_grid[i,j,k,:,:]
+
+            @tturbo for l in 1:3
+                L0 = ((M1-X1[idx1[2]])*(M1-X1[idx1[3]]))/((X1[idx1[1]]-X1[idx1[2]])*(X1[idx1[1]]-X1[idx1[3]]))
+                L1 = ((M1-X1[idx1[1]])*(M1-X1[idx1[3]]))/((X1[idx1[2]]-X1[idx1[1]])*(X1[idx1[2]]-X1[idx1[3]]))
+                L2 = ((M1-X1[idx1[1]])*(M1-X1[idx1[2]]))/((X1[idx1[3]]-X1[idx1[1]])*(X1[idx1[3]]-X1[idx1[2]]))
+
+                # interpolation along X1
+                g[l] = Ch[idx1[1],idx2[l]]*L0 + Ch[idx1[2],idx2[l]]*L1 + Ch[idx1[3],idx2[l]]*L2
+            end
+
+            # interpolation along X2
+            L0 = ((M2-X2[idx2[2]])*(M2-X2[idx2[3]]))/((X2[idx2[1]]-X2[idx2[2]])*(X2[idx2[1]]-X2[idx2[3]]))
+            L1 = ((M2-X2[idx2[1]])*(M2-X2[idx2[3]]))/((X2[idx2[2]]-X2[idx2[1]])*(X2[idx2[2]]-X2[idx2[3]]))
+            L2 = ((M2-X2[idx2[1]])*(M2-X2[idx2[2]]))/((X2[idx2[3]]-X2[idx2[1]])*(X2[idx2[3]]-X2[idx2[2]]))
+
+            #
+        
+            Ch_itp[i,j,k] = g[1]*L0 + g[2]*L1 + g[3]*L2
     
+        end
+    end
+
     #----- spline interpolation
     #=
     M1 = M0[1]; M2 = M0[2]
@@ -878,62 +935,55 @@ function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1:
 
     t = 0.
 
-    println()
-    println("#--------------------------------------------------#")
-    println()
-    println("KAK collisions")
-    println()
-
     #---------- RK4
-    @showprogress 1 "Computing..." for n in 1:1:N 
-        @inbounds @fastmath begin
-            # save data
-            push!(l1,x1)
-            push!(ld1,dx1)
-            push!(l2,x2)
-            push!(ld2,dx2)
 
-            # compute next step
-            t = t+dt
-                
-            ddot_step_1 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1,x2], [dx1,dx2])
-            k1_1 = dt*dx1
-            k1_d1 = dt*ddot_step_1[1]
-            k1_2 = dt*dx2
-            k1_d2 = dt*ddot_step_1[2]
+    @inbounds @fastmath for n in 1:1:N 
+        # save data
+        push!(l1,x1)
+        push!(ld1,dx1)
+        push!(l2,x2)
+        push!(ld2,dx2)
 
-            ddot_step_2 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
-            k2_1 = dt*(dx1 + k1_d1/2.)
-            k2_d1 = dt*ddot_step_2[1]
-            k2_2 = dt*(dx2 + k1_d2/2.)
-            k2_d2 = dt*ddot_step_2[2]
-
-            ddot_step_3 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
-            k3_1 = dt*(dx1 + k2_d1/2.)
-            k3_d1 = dt*ddot_step_3[1]
-            k3_2 = dt*(dx2 + k2_d2/2.)
-            k3_d2 = dt*ddot_step_3[2]
-
-            ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
-            k4_1 = dt*(dx1 + k3_d1)
-            k4_d1 = dt*ddot_step_4[1]
-            k4_2 = dt*(dx2 + k3_d2/2)
-            k4_d2 = dt*ddot_step_4[2]
-
-            # compute new variables
-                
-            x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
-            dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
-            x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
-            dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
-
-            # update variables
-            x1 = x1n
-            dx1 = dx1n
-            x2 = x2n
-            dx2 = dx2n
+        # compute next step
+        t = t+dt
             
-        end
+        ddot_step_1 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1,x2], [dx1,dx2])
+        k1_1 = dt*dx1
+        k1_d1 = dt*ddot_step_1[1]
+        k1_2 = dt*dx2
+        k1_d2 = dt*ddot_step_1[2]
+
+        ddot_step_2 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+        k2_1 = dt*(dx1 + k1_d1/2.)
+        k2_d1 = dt*ddot_step_2[1]
+        k2_2 = dt*(dx2 + k1_d2/2.)
+        k2_d2 = dt*ddot_step_2[2]
+
+        ddot_step_3 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+        k3_1 = dt*(dx1 + k2_d1/2.)
+        k3_d1 = dt*ddot_step_3[1]
+        k3_2 = dt*(dx2 + k2_d2/2.)
+        k3_d2 = dt*ddot_step_3[2]
+
+        ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+        k4_1 = dt*(dx1 + k3_d1)
+        k4_d1 = dt*ddot_step_4[1]
+        k4_2 = dt*(dx2 + k3_d2/2)
+        k4_d2 = dt*ddot_step_4[2]
+
+        # compute new variables
+            
+        x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
+        dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
+        x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
+        dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
+
+        # update variables
+        x1 = x1n
+        dx1 = dx1n
+        x2 = x2n
+        dx2 = dx2n
+        
     end
 
     #----------- data saving
@@ -948,12 +998,6 @@ function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1:
         npzwrite(out*"/b_v=$(ld1[1])_dt=$(dt).npy", l2)
         npzwrite(out*"/db_v=$(ld1[1])_dt=$(dt).npy", ld2)
     end
-
-    println()
-    println("data saved at "*out)
-    println()
-    println("#--------------------------------------------------#")
-    println()
 
     return l1,ld1,l2,ld2
 end
