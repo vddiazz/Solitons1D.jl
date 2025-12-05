@@ -5,6 +5,7 @@ using SpecialFunctions
 using ProgressMeter
 using Base.Threads
 using LoopVectorization
+using Interpolations
 
 ### import moduli equations # UNUSED
 
@@ -340,154 +341,6 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
     return l1,ld1,l2,ld2
 end
 
-### Interpolation
-#=
-function mkgrid_m2_pre(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
-
-    # params
-    dx = x[2]-x[1]
-
-    l1 = length(X1)
-    l2 = length(X2)
-    lx = length(x)
-
-    # coefficient grids
-    e_grid = zeros(Float64, 2,l1,l2,lx)
-    H_grid = zeros(Float64, 2,2,l1,l2,lx)
-    dW_grid = zeros(Float64, 2,l1,l2,lx)
-
-    @showprogress 1 "Computing..." for idx_1 in 1:l1 
-        for idx_2 in 1:l2
-            M0 = [X1[idx_1],X2[idx_2]]
-
-            @inbounds @fastmath for idx_x in 1:lx
-                e_grid[:,idx_1,idx_2,idx_x] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx_x],M,gamma), M0)
-                H_grid[:,:,idx_1,idx_2,idx_x] .= ForwardDiff.hessian(M -> F_kak(model,moduli,x[idx_x],M,gamma), M0)
-                dW_grid[:,idx_1,idx_2,idx_x] .= ForwardDiff.gradient(M -> W_kak(model,moduli,x[idx_x],M,gamma), M0)
-            end
-        end
-    end
-    
-    #----------- data saving
-    
-    if output_format == "jls"
-        path_e = out*"/e_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
-        path_H = out*"/H_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
-        path_dW = out*"/dW_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls"
-        
-        open(path_e, "w") do io; serialize(io, e_grid); end
-        open(path_H, "w") do io; serialize(io, H_grid); end
-        open(path_dW, "w") do io; serialize(io, dW_grid); end
-    end
-
-    println()
-    println("Data saved at "*out )
-    println()
-    println("#--------------------------------------------------#")
-    print()
-
-end
-
-function m2_step_interp_pre(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64}, M0::Vector{Float64}, dM0::Vector{Float64})
-    
-    #--- data
-    e_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/e_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
-    H_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/H_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
-    dW_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/interp/dW_grid_model=$(model)_moduli=$(moduli)_gamma=$(gamma).jls") do io; deserialize(io); end
-
-    dx = x[2]-x[1]
-
-    #--- interpolation
-    l1 = length(X1)
-    l2 = length(X2)
-    lx = length(x)
-
-    e = zeros(Float64, 2,lx)
-    H = zeros(Float64, 2,2,lx)
-    dW = zeros(Float64, 2,lx)
-
-    for dir in 1:2
-        @inbounds @fastmath for idx_x in 1:lx
-            # find indices of cell that contains M0
-            idx1 = searchsortedlast(X1,M0[1])
-            idx2 = searchsortedlast(X2,M0[2])
-
-            # clamp to valid range
-            idx1 = clamp(idx1,1,l1-1)
-            idx2 = clamp(idx2,1,l2-1)
-
-            # cell corners
-            X1_B = X1[idx1]; X1_T = X1[idx1+1]
-            X2_B = X2[idx2]; X2_T = X2[idx2+1]
-
-            # cell corner values (single dir)
-            Q11_e = e_grid[dir,idx1,idx2,idx_x]
-            Q12_e = e_grid[dir,idx1,idx2+1,idx_x]
-            Q21_e = e_grid[dir,idx1+1,idx2,idx_x]
-            Q22_e = e_grid[dir,idx1+1,idx2+1,idx_x]
-
-            Q11_dW = dW_grid[dir,idx1,idx2,idx_x]
-            Q12_dW = dW_grid[dir,idx1,idx2+1,idx_x]
-            Q21_dW = dW_grid[dir,idx1+1,idx2,idx_x]
-            Q22_dW = dW_grid[dir,idx1+1,idx2+1,idx_x]
-
-            # bilinear interpolation (single dir)
-            D = (X1_T - X1_B)*(X2_T - X2_B)
-            
-            e[dir,idx_x] = (1/D)*( Q11_e*(X1_T - M0[1])*(X2_T - M0[2])
-                                  + Q21_e*(M0[1] - X1_B)*(X2_T - M0[2])
-                                  + Q12_e*(X1_T - M0[1])*(M0[2] - X2_B)
-                                  + Q22_e*(M0[1] - X1_B)*(M0[2] - X2_B) )
-
-            dW[dir,idx_x] = (1/D)*( Q11_dW*(X1_T - M0[1])*(X2_T - M0[2])
-                                  + Q21_dW*(M0[1] - X1_B)*(X2_T - M0[2])
-                                  + Q12_dW*(X1_T - M0[1])*(M0[2] - X2_B)
-                                  + Q22_dW*(M0[1] - X1_B)*(M0[2] - X2_B) )
-            
-            @inbounds @fastmath for dir2 in 1:2
-                # cell corner values (double dir)
-                Q11_H = H_grid[dir,dir2,idx1,idx2,idx_x]
-                Q12_H = H_grid[dir,dir2,idx1,idx2+1,idx_x]
-                Q21_H = H_grid[dir,dir2,idx1+1,idx2,idx_x]
-                Q22_H = H_grid[dir,dir2,idx1+1,idx2+1,idx_x]
-
-                # bilinear interpolation (double dir)
-                H[dir,dir2,idx_x] = (1/D)*( Q11_H*(X1_T - M0[1])*(X2_T - M0[2])
-                                     + Q21_H*(M0[1] - X1_B)*(X2_T - M0[2])
-                                     + Q12_H*(X1_T - M0[1])*(M0[2] - X2_B)
-                                     + Q22_H*(M0[1] - X1_B)*(M0[2] - X2_B) )
-            end
-        end
-    end
-
-    #--- numerical integrals
-    ddot = zeros(Float64, length(M0))
-
-    # terms
-    ee_11 = sum(e[1,:] .* e[1,:])*dx
-    ee_12 = sum(e[1,:] .* e[2,:])*dx
-    ee_21 = sum(e[2,:] .* e[1,:])*dx
-    ee_22 = sum(e[2,:] .* e[2,:])*dx
-
-    He_1 = sum(e[1,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1] + H[2,2,:]*dM0[2]*dM0[2]) )*dx
-    He_2 = sum(e[2,:] .* (H[1,1,:]*dM0[1]*dM0[1] + H[1,2,:]*dM0[1]*dM0[2] + H[2,1,:]*dM0[2]*dM0[1] + H[2,2,:]*dM0[2]*dM0[2]) )*dx
-
-    pW_1 = -sum(dW[1,:])*dx
-    pW_2 = -sum(dW[2,:])*dx
-
-    #
-
-    D1 = pW_1 - He_1
-    D2 = pW_2 - He_2
-    M = ee_11*ee_22 - ee_21*ee_12
-
-    # eqs
-    ddot[1] = (D1 - D2*ee_21/ee_22)/(ee_11-(ee_21*ee_12)/ee_22)
-    ddot[2] = D2*(1/ee_22 + ee_12*ee_21/ee_22/M) - D1*ee_12/M
-
-    return ddot
-end
-=#
 ### moduli grid interpolation
 
 function mkgrid_m2(model::String,moduli::String,gamma::Float64,X1::Array{Float64},X2::Array{Float64},x::Array{Float64},out::String,output_format::String)
@@ -656,7 +509,7 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     Ch_itp = zeros(Float64, 2,2,2)
     dV_itp = zeros(Float64, 2)
 
-    #----- bilinear interpolation
+    #----- bilinear interpolation # BAD
     #= 
     # find indices of cell that contains M0
     idx1 = searchsortedlast(X1,M0[1])
@@ -694,8 +547,8 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     
     end
     =#
-    #----- quadratic interpolation
-
+    #----- quadratic interpolation # ALMOST GOOD
+    #=
     M1 = M0[1]; M2= M0[2]
 
     idx1 = searchsortedlast(X1, M1)
@@ -750,157 +603,28 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     
         end
     end
+    =#
+    #----- spline interpolation (Interpolations.jl)
 
-    #----- spline interpolation
-    #=
-    M1 = M0[1]; M2 = M0[2]
+    X1_r = LinRange(X1[1], X1[end], length(X1))
+    X2_r = LinRange(X2[1], X2[end], length(X2))
 
-    l1 = length(X1)
-    l2 = length(X2)
+    @inbounds for i in 1:2
+        M1 = M0[1]; M2 = M0[2]       
+        
+        Y_dV = dV_grid[i,:,:]
+        p_itp_dV = interpolate(Y_dV, BSpline(Quadratic(Line())), OnGrid())
+        itp_dV = extrapolate(scale(p_itp_dV, X1_r, X2_r),Line())
+        dV_itp[i] = itp_dV[M1,M2]
 
-    g = zeros(Float64, l2)
-
-    h1 = diff(X1)
-    h2 = diff(X2)
-
-    a = zeros(Float64, l1)
-    l = ones(Float64, l1)
-    mu = zeros(Float64, l1) 
-    z = zeros(Float64, l1)
-
-    b = zeros(Float64, l1-1)
-    c = zeros(Float64, l1)
-    d = zeros(Float64, l1-1)
-
-    y_dV = zeros(Float64, l1)
-    y_Ch = zeros(Float64, l1)
-
-   for i in 1:2
-       @inbounds @fastmath for x2 in 1:l2       
-            y_dV = dV_grid[i,:,x2]
-            
-            ### spline_1d(X1,y)
-            
-            @inbounds @fastmath for q in 2:l1-1
-                a[q] = 3*( (y_dV[q+1]-y_dV[q])/h1[q] - (y_dV[q] - y_dV[q-1])/h1[q-1] )
-                l[q] = 2*(X1[q+1] - X1[q-1]) - h1[q-1]*mu[q-1]
-                mu[q] = h1[q]/l[q]
-                z[q] = (a[q] - h1[q-1]*z[q-1])/l[q]
-            end
-
-            @inbounds @fastmath for w in l1-1:-1:1
-                c[w] = z[w] - mu[w]*c[w+1]
-                b[w] = (y_dV[w+1]-y_dV[w])/h1[w] - h1[w]*(2*c[w] + c[w+1])/3
-                d[w] = (c[w+1]-c[w]) / (3*h1[w])
-            end
-
-            ### spline_eval(X1,y,b,c,d,M1)
-
-            idx1 = searchsortedlast(X1,M1)
-            idx1 = clamp(idx1,1,l1-1)
-
-            dx = M1-X1[idx1]
-
-            g[x2] = y_dV[idx1] + b[idx1]*dx + c[idx1]*dx^2 + d[idx1]^3
+        @inbounds for k in 1:2, j in 1:2
+            Y_Ch = Ch_grid[i,j,k,:,:]
+            p_itp_Ch = interpolate(Y_Ch, BSpline(Quadratic(Line())), OnGrid())
+            itp_Ch = extrapolate(scale(p_itp_Ch, X1_r, X2_r),Line())
+            Ch_itp[i,j,k] = itp_Ch[M1,M2]
         end
-
-        ### spline_1d(X2,g)
-
-        a = zeros(Float64, l1)
-        l = ones(Float64, l1)
-        mu = zeros(Float64, l1)
-        z = zeros(Float64, l1)
-
-        b = zeros(Float64, l1-1)
-        c = zeros(Float64, l1)
-        d = zeros(Float64, l1-1)
-
-        @tturbo for r in 2:l2-1
-            a[r] = 3*( (g[r+1]-g[r])/h2[r] - (g[r] - g[r-1])/h2[r-1] )
-            l[r] = 2*(X2[r+1] - X2[r-1]) - h2[r-1]*mu[r-1]
-            mu[r] = h2[r]/l[r]
-            z[r] = (a[r] - h2[r-1]*z[r-1])/l[r]
-        end
-
-        @inbounds @fastmath for t in l2-1:-1:1
-           c[t] = z[t] - mu[t]*c[t+1]
-           b[t] = (g[t+1]-g[t])/h2[t] - h2[t]*(2*c[t] + c[t+1])/3.
-           d[t] = (c[t+1]-c[t]) / (3*h2[t])
-        end
-
-        ### spline_eval(X2,g,b,c,d,M2)
-
-        idx2 = searchsortedlast(X2,M2)
-        idx2 = clamp(idx2,1,l2-1)
-
-        dx = M2-X2[idx2]
-
-        dV_itp[i] = g[idx2] + b[idx2]*dx + c[idx2]*dx^2 + d[idx2]^3
     end
 
-    for k in 1:2, j in 1:2, i in 1:2 
-        @inbounds @fastmath for x2 in 1:l2       
-            y_Ch = Ch_grid[i,j,k,:,x2]
-            
-            ### spline_1d(X1,y)
-            
-            @inbounds @fastmath for q in 2:l1-1
-                a[q] = 3*( (y_Ch[q+1]-y_Ch[q])/h1[q] - (y_Ch[q] - y_Ch[q-1])/h1[q-1] )
-                l[q] = 2*(X1[q+1] - X1[q-1]) - h1[q-1]*mu[q-1]
-                mu[q] = h1[q]/l[q]
-                z[q] = (a[q] - h1[q-1]*z[q-1])/l[q]
-            end
-
-            @inbounds @fastmath for w in l1-1:-1:1
-                c[w] = z[w] - mu[w]*c[w+1]
-                b[w] = (y_dV[w+1]-y_dV[w])/h1[w] - h1[w]*(2*c[w] + c[w+1])/3
-                d[w] = (c[w+1]-c[w]) / (3*h1[w])
-            end
-
-            ### spline_eval(X1,y,b,c,d,M1)
-
-            idx1 = searchsortedlast(X1,M1)
-            idx1 = clamp(idx1,1,l1-1)
-
-            dx = M1-X1[idx1]
-
-            g[x2] = y_Ch[idx1] + b[idx1]*dx + c[idx1]*dx^2 + d[idx1]^3
-        end
-
-        ### spline_1d(X2,g)
-
-        a = zeros(Float64, l1)
-        l = ones(Float64, l1)
-        mu = zeros(Float64, l1)
-        z = zeros(Float64, l1)
-
-        b = zeros(Float64, l1-1)
-        c = zeros(Float64, l1)
-        d = zeros(Float64, l1-1)
-
-        @tturbo for r in 2:l2-1
-            a[r] = 3*( (g[r+1]-g[r])/h2[r] - (g[r] - g[r-1])/h2[r-1] )
-            l[r] = 2*(X2[r+1] - X2[r-1]) - h2[r-1]*mu[r-1]
-            mu[r] = h2[r]/l[r]
-            z[r] = (a[r] - h2[r-1]*z[r-1])/l[r]
-        end
-
-        @inbounds @fastmath for t in l2-1:-1:1
-           c[t] = z[t] - mu[t]*c[t+1]
-           b[t] = (g[t+1]-g[t])/h2[t] - h2[t]*(2*c[t] + c[t+1])/3
-           d[t] = (c[t+1]-c[t]) / (3*h2[t])
-        end
-
-        ### spline_eval(X2,g,b,c,d,M2)
-
-        idx2 = searchsortedlast(X2,M2)
-        idx2 = clamp(idx2,1,l2-1)
-
-        dx = M2-X2[idx2]
-
-        Ch_itp[i,j,k] = g[idx2] + b[idx2]*dx + c[idx2]*dx^2 + d[idx2]^3
-    end 
-    =#
     #----- coefficients
 
     i1 = -( Ch_itp[1,1,1]*dM0[1]*dM0[1] + Ch_itp[1,1,2]*dM0[1]*dM0[2] + Ch_itp[1,2,1]*dM0[2]*dM0[1] + Ch_itp[1,2,2]*dM0[2]*dM0[2] ) - dV_itp[1]
@@ -937,54 +661,57 @@ function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1:
 
     #---------- RK4
 
-    @inbounds @fastmath for n in 1:1:N 
-        # save data
-        push!(l1,x1)
-        push!(ld1,dx1)
-        push!(l2,x2)
-        push!(ld2,dx2)
+    println()
+    @showprogress 1 "Computing: KAK collision" for n in 1:1:N 
+        @inbounds @fastmath begin 
+            # save data
+            push!(l1,x1)
+            push!(ld1,dx1)
+            push!(l2,x2)
+            push!(ld2,dx2)
 
-        # compute next step
-        t = t+dt
-            
-        ddot_step_1 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1,x2], [dx1,dx2])
-        k1_1 = dt*dx1
-        k1_d1 = dt*ddot_step_1[1]
-        k1_2 = dt*dx2
-        k1_d2 = dt*ddot_step_1[2]
+            # compute next step
+            t = t+dt
+                
+            ddot_step_1 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1,x2], [dx1,dx2])
+            k1_1 = dt*dx1
+            k1_d1 = dt*ddot_step_1[1]
+            k1_2 = dt*dx2
+            k1_d2 = dt*ddot_step_1[2]
 
-        ddot_step_2 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
-        k2_1 = dt*(dx1 + k1_d1/2.)
-        k2_d1 = dt*ddot_step_2[1]
-        k2_2 = dt*(dx2 + k1_d2/2.)
-        k2_d2 = dt*ddot_step_2[2]
+            ddot_step_2 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k1_1/2., x2+k1_2/2.], [dx1+k1_d1/2., dx2+k1_d2/2.])
+            k2_1 = dt*(dx1 + k1_d1/2.)
+            k2_d1 = dt*ddot_step_2[1]
+            k2_2 = dt*(dx2 + k1_d2/2.)
+            k2_d2 = dt*ddot_step_2[2]
 
-        ddot_step_3 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
-        k3_1 = dt*(dx1 + k2_d1/2.)
-        k3_d1 = dt*ddot_step_3[1]
-        k3_2 = dt*(dx2 + k2_d2/2.)
-        k3_d2 = dt*ddot_step_3[2]
+            ddot_step_3 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k2_1/2., x2+k2_2/2.], [dx1+k2_d1/2., dx2+k2_d2/2.])
+            k3_1 = dt*(dx1 + k2_d1/2.)
+            k3_d1 = dt*ddot_step_3[1]
+            k3_2 = dt*(dx2 + k2_d2/2.)
+            k3_d2 = dt*ddot_step_3[2]
 
-        ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
-        k4_1 = dt*(dx1 + k3_d1)
-        k4_d1 = dt*ddot_step_4[1]
-        k4_2 = dt*(dx2 + k3_d2/2)
-        k4_d2 = dt*ddot_step_4[2]
+            ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
+            k4_1 = dt*(dx1 + k3_d1)
+            k4_d1 = dt*ddot_step_4[1]
+            k4_2 = dt*(dx2 + k3_d2/2)
+            k4_d2 = dt*ddot_step_4[2]
 
-        # compute new variables
-            
-        x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
-        dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
-        x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
-        dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
+            # compute new variables
+                
+            x1n = x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
+            dx1n = dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
+            x2n = x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
+            dx2n = dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
 
-        # update variables
-        x1 = x1n
-        dx1 = dx1n
-        x2 = x2n
-        dx2 = dx2n
-        
+            # update variables
+            x1 = x1n
+            dx1 = dx1n
+            x2 = x2n
+            dx2 = dx2n
+        end
     end
+    println()
 
     #----------- data saving
     
