@@ -5,7 +5,7 @@ using LaTeXStrings
 
 ### colission animation
 
-function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
+function ff_anim(ff_space::Array{Float64},ff_time::Array{Float64},path_to_file::String,savefig_bool::Bool)
 
     # PENDING: add filetype speciffication - only works with .jld2 now
 
@@ -22,7 +22,7 @@ function ff_anim(ff_space,ff_time,path_to_file,savefig_bool)
 
     # plot animation
     for (t,tval) in enumerate(Narr[3:end])
-        if t%200 == 0
+        if t%20 == 0
             plt = plot(Jarr,F[:,t],
                        xlabel=L"x",
                        ylabel=L"\Phi_{\mathrm{KAK}}(x)",

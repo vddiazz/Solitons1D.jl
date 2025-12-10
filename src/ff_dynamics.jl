@@ -5,7 +5,7 @@ using ProgressMeter
 
 #---------------- kak dynamics
 
-function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
+function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,output_format::String)
     # ff_space : Vector{Float64} : spatial dimension : [xi,xf,dx]
     # ff_time : Vector{Float64} : temporal dimension : [tf,dt]
     # incs : Vector{Float64} : initial conditions : [a0,v0]
@@ -86,17 +86,19 @@ function ff_kak(model,ff_space,ff_time,incs,out::String,output_format::String)
             # models
             if model == "phi4"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) + 2*(1-F[j,n-1]^2)*F[j,n-1])*dt^2 + 2*F[j,n-1] - F[j,n-2]
-            end
-            if model == "phi6"
+            elseif model == "phi6"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - F[j,n-1]*(1-F[j,n-1]^2)^2 + 2*(1-F[j,n-1]^2)*F[j,n-1]^3 )*dt^2 + 2*F[j,n-1] - F[j,n-2]
-            end
-            if model == "sG"
+            elseif model == "sG"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - sin(F[j,n-1]) )*dt^2 + 2*F[j,n-1] - F[j,n-2]
             end
         
-            # absorbent boundary conditions
-            F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
-            F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
+            if bcs == "absorbent"
+                F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
+                F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
+            elseif bcs == "periodic"
+                F[1,n] = F[end-1,n]
+                F[end,n] = F[2,n]
+            end
         end
     end
 
@@ -120,7 +122,7 @@ end
 
 #---------------- x=0 dynamics
 
-function ff_origin(model,ff_space,ff_time,incs,out)
+function ff_origin(model,ff_space,ff_time,bcs::String,incs,out::String)
     # ff_space : Vector{Float64} : spatial dimension : [xi,xf,dx]
     # ff_time : Vector{Float64} : temporal dimension : [tf,dt]
     # incs : Vector{Float64} : initial conditions : [a0,v0]
@@ -172,14 +174,16 @@ function ff_origin(model,ff_space,ff_time,incs,out)
             if model == "phi6"
                 F[j,n] = 0
             end
-        
-            # absorbent boundary conditions
-            F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
-            F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
+            
+            if bcs == "absorbent"
+                F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
+                F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
+            elseif bcs == "periodic"
+                F[1,n] = F[end-1,n]
+                F[end,n] = F[2,n]
+            end
         end    
     end 
-
-    println("done: v0 = $(v0)")
 
     #---------- x=0 extraction
 
