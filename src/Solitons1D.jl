@@ -10,6 +10,7 @@ using SpecialFunctions
 
 include("ff_dynamics.jl")
 export ff_kak
+export ff_kakkak
 export ff_origin
 
 include("ff_plot.jl")
