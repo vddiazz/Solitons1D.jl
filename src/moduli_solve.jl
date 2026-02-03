@@ -191,7 +191,7 @@ end
 
 # 4th-order Runge-Kutta (numerical)
 
-function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Float64},time::Array{Float64},out::String,output_format::String)
+function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Float64},space::Array{Float64},time::Array{Float64},out::String,output_format::String)
     # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
     # out : PATH : path to output folder
 
@@ -222,19 +222,22 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
     ld2 = Float64[]
 
     if type == "interp"
-        #=
+        
         Ch_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/Ch_model=$(model)_moduli=$(moduli).jls") do io; deserialize(io); end
         gpV_grid = open("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/gpV_model=$(model)_moduli=$(moduli).jls") do io; deserialize(io); end
-        =#
+        
+        X1 = open("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/X1_model=$(model)_moduli=$(moduli).jls") do io; deserialize(io); end
+        X2 = open("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/X2_model=$(model)_moduli=$(moduli).jls") do io; deserialize(io); end
+        #=
         Ch_grid = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/Ch_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy")
         dV_grid = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/dV_model=$(model)_moduli=$(moduli)_gamma=$(gamma).npy")
-    
+        
         X1 = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/X1_model=$(model)_moduli=$(moduli).npy")
         X2 = npzread("/home/velni/phd/w/scc/1d/kak_moduli/data/grid/phi4/aB/X2_model=$(model)_moduli=$(moduli).npy")
+        =#
     end
     
     t = 0.
-    space = collect(-15:0.1:15)
 
     println()
     println("#--------------------------------------------------#")
@@ -609,15 +612,15 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     X1_r = LinRange(X1[1], X1[end], length(X1))
     X2_r = LinRange(X2[1], X2[end], length(X2))
 
-    @inbounds for i in 1:2
+    @inbounds for k in 1:2
         M1 = M0[1]; M2 = M0[2]       
         
-        Y_dV = dV_grid[i,:,:]
+        Y_dV = dV_grid[k,:,:]
         p_itp_dV = interpolate(Y_dV, BSpline(Quadratic(Line())), OnGrid())
         itp_dV = extrapolate(scale(p_itp_dV, X1_r, X2_r),Line())
-        dV_itp[i] = itp_dV[M1,M2]
+        dV_itp[k] = itp_dV[M1,M2]
 
-        @inbounds for k in 1:2, j in 1:2
+        @inbounds for j in 1:2, i in 1:2
             Y_Ch = Ch_grid[i,j,k,:,:]
             p_itp_Ch = interpolate(Y_Ch, BSpline(Quadratic(Line())), OnGrid())
             itp_Ch = extrapolate(scale(p_itp_Ch, X1_r, X2_r),Line())
@@ -633,7 +636,7 @@ function m2_step_interp(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Arra
     return [i1,i2]
 end
 
-function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Array{Float64},X2::Array{Float64},model::String,moduli::String,incs::Array{Float64},time::Array{Float64},out::String,output_format::String)
+function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1::Array{Float64},X2::Array{Float64},model::String,moduli::String,incs::Array{Float64},space::Array{Float64},time::Array{Float64},out::String,output_format::String)
     # incs : Vector{Float64} : initial conditions : [m1_0, dm1_0, m2_0, dm2_0]
     # out : PATH : path to output folder
 
@@ -662,8 +665,8 @@ function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1:
     #---------- RK4
 
     println()
-    @showprogress 1 "Computing: KAK collision" for n in 1:1:N 
-        @inbounds @fastmath begin 
+    @showprogress 1 "Computing KAK collision -- v0=$(dx1)" for n in 1:1:N  
+        @inbounds @fastmath begin
             # save data
             push!(l1,x1)
             push!(ld1,dx1)
