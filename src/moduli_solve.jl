@@ -201,8 +201,8 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
     end
 
     # unpacking
-    N = time[1]
     dt = time[2]
+    N = time[1]/dt
 
     x1 = incs[1]
     dx1 = incs[2]
