@@ -28,6 +28,9 @@ export mkgrid_m2
 export m2_step_interp
 export FAST_moduli_RK4_nm2
 
+export moduli_RK4_nm3
+export m3_step
+
 include("aux.jl")
 export profile_kak_m2
 export energy_m2

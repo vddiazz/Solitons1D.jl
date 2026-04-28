@@ -117,7 +117,9 @@ function F_kak(model,moduli,x, M, gamma)
             f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( (x+M[1])/cosh(x+M[1])^2 - (x-M[1])/cosh(x-M[1])^2 )
         elseif moduli == "mpR"
             f = tanh(gamma*(x+M[1])) - tanh(gamma*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( gamma*(x+M[1])/cosh(gamma*(x+M[1]))^2 - gamma*(x-M[1])/cosh(gamma*(x-M[1]))^2 )
-        elseif moduli == "aBg"
+        elseif moduli == "pR2"
+			f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( (x+M[1])/cosh(x+M[1])^2 - (x-M[1])/cosh(x-M[1])^2 ) - (M[3]/tanh(M[1]))*( (x+M[1])^2*(tanh(x+M[1]))/(cosh(x+M[1])^2) - (x-M[1])^2*(tanh(x-M[1]))/(cosh(x-M[1])^2) )
+		elseif moduli == "aBg"
 			f = tanh(M[3]*(x+M[1])) - tanh(M[3]*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( sinh(M[3]*(x+M[1]))/(cosh(M[3]*(x+M[1])))^2 - sinh(M[3]*(x-M[1]))/(cosh(M[3]*(x-M[1])))^2 )
 		end
     end
@@ -147,6 +149,9 @@ function W_kak(model,moduli,x, M,gamma)
         elseif moduli == "mpR"
             deriv = -gamma*sech((-M[1] + x)*gamma)^2 + gamma*sech((M[1] + x)*gamma)^2 + M[2]*coth(M[1])*(-gamma*sech((-M[1] + x)*gamma)^2 + gamma*sech((M[1] + x)*gamma)^2 + 2*(-M[1]+x)*gamma^2*sech((-M[1]+x)*gamma)^2*tanh((-M[1]+x)*gamma) - 2*(M[1]+x)*gamma^2*sech((M[1]+x)*gamma)^2*tanh((M[1]+x)*gamma))
             W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
+		elseif moduli == "pR2"
+			deriv = -sech(M[1] - x)^2 + sech(M[1] + x)^2 + M[2]*coth(M[1])*(-sech(M[1] - x)^2 + sech(M[1] + x)^2 - 2*(-M[1] + x)*sech(M[1] - x)^2*tanh(M[1] - x) - 2*(M[1] + x)*sech(M[1] + x)^2*tanh(M[1] + x)) + M[3]*( (M[1]+x)^2*cosh(M[1]+x)^2 - (-M[1]+x)^2*sech(M[1]-x)^4 + 2*(M[1]+x)*cosh(M[1]+x)*sinh(M[1]+x) + (M[1]+x)^2*sinh(M[1]+x)^2 + 2*(-M[1]+x)*sech(M[1]-x)^2*tanh(M[1]-x) + 2*(-M[1]+x)^2*sech(M[1]-x)^2*tanh(M[1]-x)^2 )
+			W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
 		elseif moduli == "aBg"
 			deriv = -M[3]*sech((-M[1]+x)*M[3])^2 + M[3]*sech((M[1]+x)*M[3])^2 + M[2]*coth(M[1])*(-M[3]*sech((-M[1]+x)*M[3])^3 + M[3]*sech((M[1]+x)*M[3])^3 + M[3]*sech((-M[1]+x)*M[3])*tanh((-M[1]+x)*M[3])^2 - M[3]*sech((M[1]+x)*M[3])*tanh((M[1]+x)*M[3])^2 )
             W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
@@ -278,7 +283,7 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
     x2 = incs[3]
     dx2 = incs[4]
     
-    if moduli == "aB" || moduli == "pR" # necessary for grid selection
+    if moduli == "aB" || moduli == "pR"  # necessary for grid selection
         gamma = 0.
     elseif moduli == "maB" || moduli == "mpR"
         gamma = 1/sqrt(1-incs[2]^2)
@@ -445,14 +450,14 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
     	# nothing    
     end
 
-	gamma = 0
+	gamma = 0.
     
     t = 0.
 
     println()
     println("#--------------------------------------------------#")
     println()
-    println("KAK collision")
+    println("KAK collision: M1=$(incs[1]), dM1=$(incs[2]), M2=$(incs[3]), dM2=$(incs[4]), M3=$(incs[5]), dM3=$(incs[6])")
     println()
 
     #---------- RK4
@@ -506,12 +511,12 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
 				# nothing	
 			end
 
-            x1n 	= x1 + k1_1/6. + k2_1/3. + k3_1/3. + k4_1/6.
-            dx1n 	= dx1 + k1_d1/6. + k2_d1/3. + k3_d1/3. + k4_d1/6.
-            x2n 	= x2 + k1_2/6. + k2_2/3. + k3_2/3. + k4_2/6.
-            dx2n 	= dx2 + k1_d2/6. + k2_d2/3. + k3_d2/3. + k4_d2/6.
-            x3n 	= x3 + k1_3/6. + k2_3/3. + k3_3/3. + k4_3/6.
-            dx3n 	= dx3 + k1_d3/6. + k2_d3/3. + k3_d3/3. + k4_d3/6.
+            x1n 	= x1 	+ k1_1/6. 	+ k2_1/3. 	+ k3_1/3. 	+ k4_1/6. 
+            dx1n 	= dx1 	+ k1_d1/6. 	+ k2_d1/3. 	+ k3_d1/3. 	+ k4_d1/6. 
+            x2n 	= x2 	+ k1_2/6. 	+ k2_2/3. 	+ k3_2/3. 	+ k4_2/6. 
+            dx2n 	= dx2 	+ k1_d2/6. 	+ k2_d2/3. 	+ k3_d2/3. 	+ k4_d2/6. 
+            x3n 	= x3 	+ k1_3/6. 	+ k2_3/3. 	+ k3_3/3. 	+ k4_3/6. 
+            dx3n 	= dx3 	+ k1_d3/6. 	+ k2_d3/3. 	+ k3_d3/3. 	+ k4_d3/6. 
 
             # update variables
             x1 	= x1n

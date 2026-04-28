@@ -11,7 +11,7 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
     # incs : Vector{Float64} : initial conditions : [a0,v0]
     # out : PATH : path of output folder
 
-    # PENDING: Does not work with sG
+    # PENDING: Does not work with phi6
 
     if (output_format != "jld2") && (output_format != "npy")
         println("invalid output data type")
@@ -54,8 +54,8 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
             F[j,2] = F[j,1] + 0
         end
         if model == "sG"
-            F[j,1] = 4*( atan(exp(gamma*(x+a0))) - atan(exp(gamma*(x-a0))) )
-            F[j,2] = F[j,1] + 4*( -(exp(gamma*(x+a0)*gamma*v0))/(1+exp(2*gamma*(x+a0))) - (exp(gamma*(x-a0)*gamma*v0))/(1+exp(2*gamma*(x-a0)))  )*dt 
+            F[j,1] = 4*atan(exp(gamma*(x+a0))) + 4*atan(exp(-gamma*(x-a0))) - 2*pi
+            F[j,2] = F[j,1] - 4*gamma*v0*sech(gamma*(x+a0))*dt - 4*gamma*v0*sech(gamma*(x-a0))*dt 
         end
     end
 
@@ -69,8 +69,8 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
         F[end,:] .= 0
     end
     if model == "sG"
-        F[1,:] .= 0.0
-        F[end,:] .= 0.0
+        F[1,:] .= 0
+        F[end,:] .= 0
     end
 
     #---------- time evolution
@@ -125,8 +125,6 @@ function ff_kakkak(model::String,ff_space,ff_time,incs,bcs::String,out::String,o
     # ff_time : Vector{Float64} : temporal dimension : [tf,dt]
     # incs : Vector{Float64} : initial conditions : [a0,v0]
     # out : PATH : path of output folder
-
-    # PENDING: Does not work with sG
 
     if (output_format != "jld2") && (output_format != "npy")
         println("invalid output data type")
@@ -273,13 +271,29 @@ function ff_origin(model,ff_space,ff_time,bcs::String,incs,out::String)
     # temporal ic: initial configuration
     for j in 1:1:J
         x = xi + j*dx
-        F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 # field
-        F[j,2] = F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 + (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt ) # derivative
-    end
+        
+		if model == "phi4"
+			F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 # field
+        	F[j,2] = F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 + (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt ) # derivative
+    	elseif model == "sG"
+			F[j,1] = 4*( atan(exp(gamma*(x+a0))) - atan(exp(gamma*(x-a0))) )
+            F[j,2] = F[j,1] + 4*( -(exp(gamma*(x+a0)*gamma*v0))/(1+exp(2*gamma*(x+a0))) - (exp(gamma*(x-a0)*gamma*v0))/(1+exp(2*gamma*(x-a0)))  )*dt 
+		end
+	end
 
     # spatial ic: assymptotic value
-    F[1,:] .= -1.0
-    F[end,:] .= -1.0
+    if model == "phi4"
+        F[1,:] .= -1.0
+        F[end,:] .= -1.0
+    end
+    if model == "phi6" # PENDING
+        F[1,:] .= 0
+        F[end,:] .= 0
+    end
+    if model == "sG"
+        F[1,:] .= 0.0
+        F[end,:] .= 0.0
+    end
 
     #---------- time evolution
     
@@ -289,9 +303,10 @@ function ff_origin(model,ff_space,ff_time,bcs::String,incs,out::String)
             # models
             if model == "phi4"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) + 2*(1-F[j,n-1]^2)*F[j,n-1])*dt^2 + 2*F[j,n-1] - F[j,n-2]
-            end
-            if model == "phi6"
+            elseif model == "phi6"
                 F[j,n] = 0
+			elseif model == "sG"
+                F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - sin(F[j,n-1]) )*dt^2 + 2*F[j,n-1] - F[j,n-2]
             end
             
             if bcs == "absorbent"
