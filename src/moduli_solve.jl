@@ -939,4 +939,111 @@ function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1:
     return l1,ld1,l2,ld2
 end
 
-    
+#-------------------- Numerical initial conditions
+
+function ode_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+ 
+	# compute partials of g_aa
+	# compute partials of V
+
+    # params
+    dx = x[2]-x[1]
+
+    # coefficient functions
+    e = zeros(Float64, length(M0),length(x))
+
+    @threads for idx in 1:length(x)
+        e[:,idx] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
+    end
+
+    #--- numerical integrals
+    ddot = zeros(Float64, length(M0))
+
+    # metric
+    g_aa = sum(e[1,:] .* e[1,:])*dx
+	
+	# potential
+	V = U_kak(model,moduli,x,M0,gamma)
+
+	# ODE
+	res = V - 0.5*s*g_aa
+
+	return res
+end
+
+function broyden_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+
+	M1 = [M0[1]]
+	M2 = [M0[2]]
+	a0 = M0[3] # NOTE THAT a0 GOES LAST
+
+	# main loop
+	h = 0.0001
+	prec = 1e-6
+	max_nit = 100
+
+	W(varM0) = ode_m3(s,model,moduli,gamma,x,varM0)
+
+	epsilon = 1
+	while epsilon > prec || nit < max_nit
+		# update moduli
+		Mtemp = [M1[end], M2[end],a0]
+
+		# compute residual
+		F_1 = (W(Mtemp .+ [h,0.,0.]) - W(Mtemp .+ [-h,0.,0.]))/(2*h)
+		F_2 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
+
+		J_11 = (W(Mtemp .+ [h,0.,0.]) - 2*W(Mtemp) + W(Mtemp .+ [-h,0.,0.]))/(h^2)
+		J_12 = (W(Mtemp .+ [h,h,0.]) - W(Mtemp .+ [h,-h,0.]) - W(Mtemp .+ [-h,h,0.]) + W(Mtemp .+ [-h,-h,0.]))/(4*h^2)
+		J_22 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
+
+		# update
+		delta_m1 = -(J_22*F_1 - J_12*F_2)/(J_11*J_22 - J_12*J_12)
+		delta_m2 = -(-J_12*F_1 + J_11*F_2)/(J_11*J_22 - J_12*J_12)
+
+		new_m1 = Mtemp[1] + delta_m1
+		new_m2 = Mtemp[2] + delta_m2
+
+		# check termination
+		epsilon = sqrt(F_1^2 + F_2^2)
+
+		# save data
+		println("Step $(it): (m1,m2) = ($(new_m1),$(new_m2))")
+
+		push!(M1,new_m1); push!(M2,new_m2)
+	end
+
+	return M1[end],M2[end]
+ 
+end
+
+function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
+
+	s_vals = [0.002,0.004,0.006]
+	Ms = zeros(Float64, 3,length(s_vals)+1)
+
+	# initial moduli
+	initial_M1,initial_M2 = broyden(0.,model,moduli,gamma,x,[0.,0.,10.])
+
+	Ms[1,1] = initial_M1
+	Ms[2,1] = initial_M2
+	Ms[3,:] = 10.
+
+	# main loop
+	for (s0_idx,s0) in enumerate(s_vals)
+		M1,M2 = broyden(s0,model,moduli,gamma,x,Ms[:,s0_idx])
+
+		Ms[1,s0_idx+1] = M1
+		Ms[2,s0_idx+1] = M2
+	end
+
+	# fit
+	deg = 6
+
+	vmm = hcat([s_vals.^i for i in 0:deg]...)
+	cf1 = vmm \ Ms[1,2:end] 
+	cf2 = vmm \ Ms[2,2:end]
+
+	return cf1,cf2
+
+end 

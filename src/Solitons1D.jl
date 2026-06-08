@@ -31,6 +31,10 @@ export FAST_moduli_RK4_nm2
 export moduli_RK4_nm3
 export m3_step
 
+export ode_m3
+export broyden_m3
+export incs_m3
+
 include("aux.jl")
 export profile_kak_m2
 export energy_m2
