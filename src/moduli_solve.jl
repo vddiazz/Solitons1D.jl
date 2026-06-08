@@ -951,19 +951,18 @@ function ode_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector
 
     # coefficient functions
     e = zeros(Float64, length(M0),length(x))
+	v = zeros(Float64, length(x))
 
     @threads for idx in 1:length(x)
         e[:,idx] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
-    end
-
-    #--- numerical integrals
-    ddot = zeros(Float64, length(M0))
+    	v[idx] = U_kak(model,moduli,x[idx],M0,gamma)
+	end
 
     # metric
     g_aa = sum(e[1,:] .* e[1,:])*dx
 	
 	# potential
-	V = U_kak(model,moduli,x,M0,gamma)
+	V = sum(v)*dx
 
 	# ODE
 	res = V - 0.5*s*g_aa
@@ -987,15 +986,15 @@ function broyden_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 	epsilon = 1
 	while epsilon > prec || nit < max_nit
 		# update moduli
-		Mtemp = [M1[end], M2[end],a0]
+		Mtemp = [a0,M1[end], M2[end]]
 
 		# compute residual
-		F_1 = (W(Mtemp .+ [h,0.,0.]) - W(Mtemp .+ [-h,0.,0.]))/(2*h)
-		F_2 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
+		F_1 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
+		F_2 = (W(Mtemp .+ [0.,0.,h]) - W(Mtemp .+ [0.,0.,-h]))/(2*h)
 
-		J_11 = (W(Mtemp .+ [h,0.,0.]) - 2*W(Mtemp) + W(Mtemp .+ [-h,0.,0.]))/(h^2)
-		J_12 = (W(Mtemp .+ [h,h,0.]) - W(Mtemp .+ [h,-h,0.]) - W(Mtemp .+ [-h,h,0.]) + W(Mtemp .+ [-h,-h,0.]))/(4*h^2)
-		J_22 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
+		J_11 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
+		J_12 = (W(Mtemp .+ [0.,h,h]) - W(Mtemp .+ [0.,h,-h]) - W(Mtemp .+ [0.,-h,h]) + W(Mtemp .+ [0.,-h,-h]))/(4*h^2)
+		J_22 = (W(Mtemp .+ [0.,0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,0.,-h]))/(h^2)
 
 		# update
 		delta_m1 = -(J_22*F_1 - J_12*F_2)/(J_11*J_22 - J_12*J_12)
