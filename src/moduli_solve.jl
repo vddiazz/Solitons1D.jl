@@ -107,6 +107,34 @@ end
 using ForwardDiff
 
 # MOVE TO AUX.JL
+function F_kink(model,moduli,x, M, gamma)
+    if model == "phi4"
+        if moduli == "aB"
+            f = tanh(x-M[1]) + M[2]*( sinh(x-M[1])/(cosh(x-M[1]))^2)
+        elseif moduli == "maB"
+        	#
+		elseif moduli == "pR"
+        	#
+		elseif moduli == "mpR"
+        	#
+		elseif moduli == "pR2"
+			f = tanh(x-M[1]) + M[2]*(x-M[1])/(cosh(x-M[1]))^2 - M[3]*(x-M[1])^2*tanh(x-M[1])/cosh(x-M[1])^2
+		elseif moduli == "aBg"
+			#
+		end
+    end
+    return f
+end
+
+# MOVE TO AUX.JL
+function U_kink(model,moduli, x, M,gamma)
+    if model == "phi4"
+        U = 0.5*(1-F_kink(model,moduli,x,M,gamma)^2)^2
+    end
+    return U
+end
+
+# MOVE TO AUX.JL
 function F_kak(model,moduli,x, M, gamma)
     if model == "phi4"
         if moduli == "aB"
@@ -941,7 +969,7 @@ end
 
 #-------------------- Numerical initial conditions
 
-function ode_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+function ode_num(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
  
 	# compute partials of g_aa
 	# compute partials of V
@@ -954,14 +982,18 @@ function ode_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector
 	v = zeros(Float64, length(x))
 
     @threads for idx in 1:length(x)
-        e[:,idx] .= ForwardDiff.gradient(M -> F_kak(model,moduli,x[idx],M,gamma), M0)
-    	v[idx] = U_kak(model,moduli,x[idx],M0,gamma)
+        e[:,idx] .= ForwardDiff.gradient(M -> F_kink(model,moduli,x[idx],M,gamma), M0)
+    	
+		v1 = ForwardDiff.derivative(x0 -> F_kink(model,moduli,x0,M0,gamma), x[idx])
+		v2 = U_kink(model,moduli,x[idx],M0,gamma)
+		v[idx] = 0.5*v1^2 + v2
 	end
 
     # metric
     g_aa = sum(e[1,:] .* e[1,:])*dx
 	
 	# potential
+	
 	V = sum(v)*dx
 
 	# ODE
@@ -970,11 +1002,12 @@ function ode_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector
 	return res
 end
 
-function broyden_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+#
 
-	M1 = [M0[1]]
-	M2 = [M0[2]]
-	a0 = M0[3] # NOTE THAT a0 GOES LAST
+function broyden_1d(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+
+	M1 = [M0[2]]
+	a0 = M0[1]
 
 	# main loop
 	h = 0.0001
@@ -992,9 +1025,10 @@ function broyden_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 		F_1 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
 		F_2 = (W(Mtemp .+ [0.,0.,h]) - W(Mtemp .+ [0.,0.,-h]))/(2*h)
 
-		J_11 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
-		J_12 = (W(Mtemp .+ [0.,h,h]) - W(Mtemp .+ [0.,h,-h]) - W(Mtemp .+ [0.,-h,h]) + W(Mtemp .+ [0.,-h,-h]))/(4*h^2)
-		J_22 = (W(Mtemp .+ [0.,0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,0.,-h]))/(h^2)
+		# DO NOT COMPUTE J AT EACH STEP
+		#J_11 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
+		#J_12 = (W(Mtemp .+ [0.,h,h]) - W(Mtemp .+ [0.,h,-h]) - W(Mtemp .+ [0.,-h,h]) + W(Mtemp .+ [0.,-h,-h]))/(4*h^2)
+		#J_22 = (W(Mtemp .+ [0.,0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,0.,-h]))/(h^2)
 
 		# update
 		delta_m1 = -(J_22*F_1 - J_12*F_2)/(J_11*J_22 - J_12*J_12)
@@ -1015,6 +1049,56 @@ function broyden_m3(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 	return M1[end],M2[end]
  
 end
+
+
+function broyden_2d(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+
+	M1 = [M0[2]]
+	M2 = [M0[3]]
+	a0 = M0[1]
+
+	# main loop
+	h = 0.0001
+	prec = 1e-6
+	max_nit = 100
+
+	W(varM0) = ode_m3(s,model,moduli,gamma,x,varM0)
+
+	epsilon = 1
+	while epsilon > prec || nit < max_nit
+		# update moduli
+		Mtemp = [a0,M1[end], M2[end]]
+
+		# compute residual
+		F_1 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
+		F_2 = (W(Mtemp .+ [0.,0.,h]) - W(Mtemp .+ [0.,0.,-h]))/(2*h)
+
+		# DO NOT COMPUTE J AT EACH STEP
+		#J_11 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
+		#J_12 = (W(Mtemp .+ [0.,h,h]) - W(Mtemp .+ [0.,h,-h]) - W(Mtemp .+ [0.,-h,h]) + W(Mtemp .+ [0.,-h,-h]))/(4*h^2)
+		#J_22 = (W(Mtemp .+ [0.,0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,0.,-h]))/(h^2)
+
+		# update
+		delta_m1 = -(J_22*F_1 - J_12*F_2)/(J_11*J_22 - J_12*J_12)
+		delta_m2 = -(-J_12*F_1 + J_11*F_2)/(J_11*J_22 - J_12*J_12)
+
+		new_m1 = Mtemp[1] + delta_m1
+		new_m2 = Mtemp[2] + delta_m2
+
+		# check termination
+		epsilon = sqrt(F_1^2 + F_2^2)
+
+		# save data
+		println("Step $(it): (m1,m2) = ($(new_m1),$(new_m2))")
+
+		push!(M1,new_m1); push!(M2,new_m2)
+	end
+
+	return M1[end],M2[end]
+ 
+end
+
+#
 
 function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
 

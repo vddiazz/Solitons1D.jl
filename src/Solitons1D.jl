@@ -19,6 +19,8 @@ export ff_anim
 include("moduli_solve.jl")
 export eq_import
 export moduli_RK4_m2
+export F_kink
+export U_kink
 export F_kak
 export U_kak
 export W_kak
@@ -31,7 +33,7 @@ export FAST_moduli_RK4_nm2
 export moduli_RK4_nm3
 export m3_step
 
-export ode_m3
+export ode_num
 export broyden_m3
 export incs_m3
 
