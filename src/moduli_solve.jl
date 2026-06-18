@@ -107,6 +107,34 @@ end
 using ForwardDiff
 
 # MOVE TO AUX.JL
+function F_kink(model,moduli,x, M, gamma)
+    if model == "phi4"
+        if moduli == "aB"
+            f = tanh(x-M[1]) + M[2]*( sinh(x-M[1])/(cosh(x-M[1]))^2)
+        elseif moduli == "maB"
+        	#
+		elseif moduli == "pR"
+        	#
+		elseif moduli == "mpR"
+        	#
+		elseif moduli == "pR2"
+			f = tanh(x-M[1]) + M[2]*(x-M[1])/(cosh(x-M[1]))^2 - M[3]*(x-M[1])^2*tanh(x-M[1])/cosh(x-M[1])^2
+		elseif moduli == "aBg"
+			#
+		end
+    end
+    return f
+end
+
+# MOVE TO AUX.JL
+function U_kink(model,moduli, x, M,gamma)
+    if model == "phi4"
+        U = 0.5*(1-F_kink(model,moduli,x,M,gamma)^2)^2
+    end
+    return U
+end
+
+# MOVE TO AUX.JL
 function F_kak(model,moduli,x, M, gamma)
     if model == "phi4"
         if moduli == "aB"
@@ -939,4 +967,165 @@ function FAST_moduli_RK4_nm2(Ch_grid::Array{Float64},dV_grid::Array{Float64},X1:
     return l1,ld1,l2,ld2
 end
 
-    
+#-------------------- Numerical initial conditions
+
+function ode_num(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0)
+ 
+	# compute partials of g_aa
+	# compute partials of V
+
+    # params
+    dx = x[2]-x[1]
+	T = eltype(M0)
+
+    # coefficient functions
+    e = zeros(T, length(M0),length(x))
+	v = zeros(T, length(x))
+
+    @threads for idx in 1:length(x)
+        e[:,idx] .= ForwardDiff.gradient(M -> F_kink(model,moduli,x[idx],M,gamma), M0)
+    	
+		v1 = ForwardDiff.derivative(x0 -> F_kink(model,moduli,x0,M0,gamma), x[idx])
+		v2 = U_kink(model,moduli,x[idx],M0,gamma)
+		v[idx] = 0.5*v1^2 + v2
+	end
+
+    # metric
+    g_aa = sum(e[1,:] .* e[1,:])*dx
+	
+	# potential
+	
+	V = sum(v)*dx
+
+	# ODE
+	res = V - 0.5*s*g_aa
+
+	return res
+end
+
+#
+
+function broyden_1d(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+
+	M1 = [M0[2]]
+	a0 = M0[1]
+
+	# main loop
+	h = 0.001
+	prec = 1e-5
+	max_nit = 10
+
+	W(varM0) = ode_num(s,model,moduli,gamma,x,varM0)
+
+	epsilon = 1
+	nit = 0
+	while epsilon > prec && nit < max_nit
+		# update counter
+		nit = nit + 1
+
+		# update moduli
+		Mtemp = [a0,M1[end]]
+
+		# compute residual
+		F0 = (W(Mtemp .+ [0.,h]) - W(Mtemp .+ [0.,-h]))/(2*h)
+		Fp = (W(Mtemp .+ [0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h]))/(h^2)
+
+		# update step
+		epsilon = abs(Fp)
+
+		new_m1 = Mtemp[2] - F0/Fp
+
+		# save data
+		println("Step $(nit): m1 = $(new_m1)")
+
+		push!(M1,new_m1)
+	end
+
+	return M1
+ 
+end
+
+
+function broyden_2d(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+
+	M1 = [M0[2]]
+	M2 = [M0[3]]
+	a0 = M0[1]
+
+	J = Matrix(I, 2,2)
+
+	# main loop
+	h = 0.0001
+	prec = 1e-5
+	max_nit = 25
+
+	W(varM0) = ode_num(s,model,moduli,gamma,x,varM0)
+
+	epsilon = 1
+	nit = 0
+	while epsilon > prec && nit < max_nit
+		nit = nit + 1		
+
+		# update moduli
+		Mtemp = [a0,M1[end], M2[end]]
+
+		# compute residual
+		Ftemp = ForwardDiff.gradient(M -> W(M), Mtemp)
+			
+		# update
+		delta_m = -J \ Ftemp[2:3]
+
+		new_m1 = Mtemp[2] + delta_m[1]
+		new_m2 = Mtemp[3] + delta_m[2]
+
+		Y = ForwardDiff.gradient(M -> W(M), [a0,new_m1,new_m2]) .- Ftemp
+		J += ((Y[2:3] - J*delta_m) * delta_m')/(delta_m' * delta_m)
+
+		# check termination
+		epsilon = norm(Ftemp[2:3])
+
+		# save data
+		println("Step $(nit): (m1,m2) = ($(new_m1),$(new_m2))")
+
+		push!(M1,new_m1); push!(M2,new_m2)
+	end
+
+	return M1[end],M2[end]
+ 
+end
+
+#
+
+function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
+
+	s_vals = [0.03,0.04,0.05,0.06,0.07]
+	Ms = zeros(Float64, 3,length(s_vals))
+
+	# initial moduli
+	a0 = 10.
+
+	Ms[1,:] .= a0
+	
+	initial_m1 = 0.75
+	initial_m2 = 0.75
+
+	# main loop
+	for (s0_idx,s0) in enumerate(s_vals)
+		println("s=$(s0)")
+		M1,M2 = broyden_2d(s0,model,moduli,gamma,x,[a0,initial_m1,initial_m2])
+		println()
+
+		Ms[2,s0_idx] = M1
+		Ms[3,s0_idx] = M2
+	end
+
+	# fit
+	deg = 4
+
+	vmm = hcat([s_vals.^i for i in 0:deg]...)
+	cf1 = vmm \ Ms[2,:] 
+	cf2 = vmm \ Ms[3,:]
+
+	return cf1,cf2
+
+end 

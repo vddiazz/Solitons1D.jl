@@ -91,14 +91,14 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
             elseif model == "sG"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - sin(F[j,n-1]) )*dt^2 + 2*F[j,n-1] - F[j,n-2]
             end
-        
-            if bcs == "absorbent"
-                F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
-                F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
-            elseif bcs == "periodic"
-                F[1,n] = F[end-1,n]
-                F[end,n] = F[2,n]
-            end
+        end
+ 
+        if bcs == "absorbent"
+           	F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
+           	F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
+       	elseif bcs == "periodic"
+           	F[1,n] = F[end-1,n]
+           	F[end,n] = F[2,n]
         end
     end
 
@@ -308,15 +308,15 @@ function ff_origin(model,ff_space,ff_time,bcs::String,incs,out::String)
 			elseif model == "sG"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - sin(F[j,n-1]) )*dt^2 + 2*F[j,n-1] - F[j,n-2]
             end
-            
-            if bcs == "absorbent"
-                F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
-                F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
-            elseif bcs == "periodic"
-                F[1,n] = F[end-1,n]
-                F[end,n] = F[2,n]
-            end
-        end    
+        end
+    
+        if bcs == "absorbent"
+        	F[1,n] = (1/(dx+dt))*(dx*F[1,n-1] + dt*F[2,n])
+            F[end,n] = (1/(dx+dt))*(dt*F[end-1,n] + dx*F[end,n-1])
+        elseif bcs == "periodic"
+            F[1,n] = F[end-1,n]
+            F[end,n] = F[2,n]
+        end           
     end 
 
     #---------- x=0 extraction
