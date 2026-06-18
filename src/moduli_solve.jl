@@ -969,17 +969,18 @@ end
 
 #-------------------- Numerical initial conditions
 
-function ode_num(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0::Vector{Float64})
+function ode_num(s::Float64,model::String,moduli::String,gamma::Float64,x::Vector{Float64}, M0)
  
 	# compute partials of g_aa
 	# compute partials of V
 
     # params
     dx = x[2]-x[1]
+	T = eltype(M0)
 
     # coefficient functions
-    e = zeros(Float64, length(M0),length(x))
-	v = zeros(Float64, length(x))
+    e = zeros(T, length(M0),length(x))
+	v = zeros(T, length(x))
 
     @threads for idx in 1:length(x)
         e[:,idx] .= ForwardDiff.gradient(M -> F_kink(model,moduli,x[idx],M,gamma), M0)
@@ -1010,43 +1011,37 @@ function broyden_1d(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 	a0 = M0[1]
 
 	# main loop
-	h = 0.0001
-	prec = 1e-6
-	max_nit = 100
+	h = 0.001
+	prec = 1e-5
+	max_nit = 10
 
-	W(varM0) = ode_m3(s,model,moduli,gamma,x,varM0)
+	W(varM0) = ode_num(s,model,moduli,gamma,x,varM0)
 
 	epsilon = 1
-	while epsilon > prec || nit < max_nit
+	nit = 0
+	while epsilon > prec && nit < max_nit
+		# update counter
+		nit = nit + 1
+
 		# update moduli
-		Mtemp = [a0,M1[end], M2[end]]
+		Mtemp = [a0,M1[end]]
 
 		# compute residual
-		F_1 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
-		F_2 = (W(Mtemp .+ [0.,0.,h]) - W(Mtemp .+ [0.,0.,-h]))/(2*h)
+		F0 = (W(Mtemp .+ [0.,h]) - W(Mtemp .+ [0.,-h]))/(2*h)
+		Fp = (W(Mtemp .+ [0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h]))/(h^2)
 
-		# DO NOT COMPUTE J AT EACH STEP
-		#J_11 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
-		#J_12 = (W(Mtemp .+ [0.,h,h]) - W(Mtemp .+ [0.,h,-h]) - W(Mtemp .+ [0.,-h,h]) + W(Mtemp .+ [0.,-h,-h]))/(4*h^2)
-		#J_22 = (W(Mtemp .+ [0.,0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,0.,-h]))/(h^2)
+		# update step
+		epsilon = abs(Fp)
 
-		# update
-		delta_m1 = -(J_22*F_1 - J_12*F_2)/(J_11*J_22 - J_12*J_12)
-		delta_m2 = -(-J_12*F_1 + J_11*F_2)/(J_11*J_22 - J_12*J_12)
-
-		new_m1 = Mtemp[1] + delta_m1
-		new_m2 = Mtemp[2] + delta_m2
-
-		# check termination
-		epsilon = sqrt(F_1^2 + F_2^2)
+		new_m1 = Mtemp[2] - F0/Fp
 
 		# save data
-		println("Step $(it): (m1,m2) = ($(new_m1),$(new_m2))")
+		println("Step $(nit): m1 = $(new_m1)")
 
-		push!(M1,new_m1); push!(M2,new_m2)
+		push!(M1,new_m1)
 	end
 
-	return M1[end],M2[end]
+	return M1
  
 end
 
@@ -1057,44 +1052,45 @@ function broyden_2d(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 	M2 = [M0[3]]
 	a0 = M0[1]
 
+	J = Matrix(I, 2,2)
+
 	# main loop
 	h = 0.0001
-	prec = 1e-6
-	max_nit = 100
+	prec = 1e-5
+	max_nit = 25
 
-	W(varM0) = ode_m3(s,model,moduli,gamma,x,varM0)
+	W(varM0) = ode_num(s,model,moduli,gamma,x,varM0)
 
 	epsilon = 1
-	while epsilon > prec || nit < max_nit
+	nit = 0
+	while epsilon > prec && nit < max_nit
+		nit = nit + 1		
+
 		# update moduli
 		Mtemp = [a0,M1[end], M2[end]]
 
 		# compute residual
-		F_1 = (W(Mtemp .+ [0.,h,0.]) - W(Mtemp .+ [0.,-h,0.]))/(2*h)
-		F_2 = (W(Mtemp .+ [0.,0.,h]) - W(Mtemp .+ [0.,0.,-h]))/(2*h)
-
-		# DO NOT COMPUTE J AT EACH STEP
-		#J_11 = (W(Mtemp .+ [0.,h,0.]) - 2*W(Mtemp) + W(Mtemp .+ [0.,-h,0.]))/(h^2)
-		#J_12 = (W(Mtemp .+ [0.,h,h]) - W(Mtemp .+ [0.,h,-h]) - W(Mtemp .+ [0.,-h,h]) + W(Mtemp .+ [0.,-h,-h]))/(4*h^2)
-		#J_22 = (W(Mtemp .+ [0.,0.,h]) - 2*W(Mtemp) + W(Mtemp .+ [0.,0.,-h]))/(h^2)
-
+		Ftemp = ForwardDiff.gradient(M -> W(M), Mtemp)
+			
 		# update
-		delta_m1 = -(J_22*F_1 - J_12*F_2)/(J_11*J_22 - J_12*J_12)
-		delta_m2 = -(-J_12*F_1 + J_11*F_2)/(J_11*J_22 - J_12*J_12)
+		delta_m = -J \ Ftemp[2:3]
 
-		new_m1 = Mtemp[1] + delta_m1
-		new_m2 = Mtemp[2] + delta_m2
+		new_m1 = Mtemp[2] + delta_m[1]
+		new_m2 = Mtemp[3] + delta_m[2]
+
+		Y = ForwardDiff.gradient(M -> W(M), [a0,new_m1,new_m2]) .- Ftemp
+		J += ((Y[2:3] - J*delta_m) * delta_m')/(delta_m' * delta_m)
 
 		# check termination
-		epsilon = sqrt(F_1^2 + F_2^2)
+		epsilon = norm(Ftemp[2:3])
 
 		# save data
-		println("Step $(it): (m1,m2) = ($(new_m1),$(new_m2))")
+		println("Step $(nit): (m1,m2) = ($(new_m1),$(new_m2))")
 
 		push!(M1,new_m1); push!(M2,new_m2)
 	end
 
-	return M1[end],M2[end]
+	return M1,M2
  
 end
 

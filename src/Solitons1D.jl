@@ -34,7 +34,8 @@ export moduli_RK4_nm3
 export m3_step
 
 export ode_num
-export broyden_m3
+export broyden_1d
+export broyden_2d
 export incs_m3
 
 include("aux.jl")
