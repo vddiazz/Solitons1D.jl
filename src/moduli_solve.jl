@@ -1090,7 +1090,7 @@ function broyden_2d(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 		push!(M1,new_m1); push!(M2,new_m2)
 	end
 
-	return M1,M2
+	return M1[end],M2[end]
  
 end
 
@@ -1098,30 +1098,33 @@ end
 
 function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
 
-	s_vals = [0.002,0.004,0.006]
-	Ms = zeros(Float64, 3,length(s_vals)+1)
+	s_vals = [0.03,0.04,0.05,0.06,0.07]
+	Ms = zeros(Float64, 3,length(s_vals))
 
 	# initial moduli
-	initial_M1,initial_M2 = broyden(0.,model,moduli,gamma,x,[0.,0.,10.])
+	a0 = 10.
 
-	Ms[1,1] = initial_M1
-	Ms[2,1] = initial_M2
-	Ms[3,:] = 10.
+	Ms[1,:] .= a0
+	
+	initial_m1 = 0.75
+	initial_m2 = 0.75
 
 	# main loop
 	for (s0_idx,s0) in enumerate(s_vals)
-		M1,M2 = broyden(s0,model,moduli,gamma,x,Ms[:,s0_idx])
+		println("s=$(s0)")
+		M1,M2 = broyden_2d(s0,model,moduli,gamma,x,[a0,initial_m1,initial_m2])
+		println()
 
-		Ms[1,s0_idx+1] = M1
-		Ms[2,s0_idx+1] = M2
+		Ms[2,s0_idx] = M1
+		Ms[3,s0_idx] = M2
 	end
 
 	# fit
-	deg = 6
+	deg = 4
 
 	vmm = hcat([s_vals.^i for i in 0:deg]...)
-	cf1 = vmm \ Ms[1,2:end] 
-	cf2 = vmm \ Ms[2,2:end]
+	cf1 = vmm \ Ms[2,:] 
+	cf2 = vmm \ Ms[3,:]
 
 	return cf1,cf2
 
