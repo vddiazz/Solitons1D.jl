@@ -146,7 +146,8 @@ function F_kak(model,moduli,x, M, gamma)
         elseif moduli == "mpR"
             f = tanh(gamma*(x+M[1])) - tanh(gamma*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( gamma*(x+M[1])/cosh(gamma*(x+M[1]))^2 - gamma*(x-M[1])/cosh(gamma*(x-M[1]))^2 )
         elseif moduli == "pR2"
-			f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( (x+M[1])/cosh(x+M[1])^2 - (x-M[1])/cosh(x-M[1])^2 ) - (M[3]/tanh(M[1]))*( (x+M[1])^2*(tanh(x+M[1]))/(cosh(x+M[1])^2) - (x-M[1])^2*(tanh(x-M[1]))/(cosh(x-M[1])^2) )
+			a = M[1]; c1 = M[2]; c2 = M[3]
+			f = tanh(x+a) + (c1/tanh(a))*(x+a)/cosh(x+a)^2 - (c2/tanh(a))*((x+a)^2)*tanh(x+a)/cosh(x+a)^2 - tanh(x-a) - (c1/tanh(a))*(x-a)/cosh(x-a)^2 + (c2/tanh(a))*((x-a)^2)*tanh(x-a)/cosh(x-a)^2 - 1
 		elseif moduli == "aBg"
 			f = tanh(M[3]*(x+M[1])) - tanh(M[3]*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( sinh(M[3]*(x+M[1]))/(cosh(M[3]*(x+M[1])))^2 - sinh(M[3]*(x-M[1]))/(cosh(M[3]*(x-M[1])))^2 )
 		end
@@ -178,7 +179,16 @@ function W_kak(model,moduli,x, M,gamma)
             deriv = -gamma*sech((-M[1] + x)*gamma)^2 + gamma*sech((M[1] + x)*gamma)^2 + M[2]*coth(M[1])*(-gamma*sech((-M[1] + x)*gamma)^2 + gamma*sech((M[1] + x)*gamma)^2 + 2*(-M[1]+x)*gamma^2*sech((-M[1]+x)*gamma)^2*tanh((-M[1]+x)*gamma) - 2*(M[1]+x)*gamma^2*sech((M[1]+x)*gamma)^2*tanh((M[1]+x)*gamma))
             W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
 		elseif moduli == "pR2"
-			deriv = -sech(M[1] - x)^2 + sech(M[1] + x)^2 + M[2]*coth(M[1])*(-sech(M[1] - x)^2 + sech(M[1] + x)^2 - 2*(-M[1] + x)*sech(M[1] - x)^2*tanh(M[1] - x) - 2*(M[1] + x)*sech(M[1] + x)^2*tanh(M[1] + x)) + M[3]*( (M[1]+x)^2*cosh(M[1]+x)^2 - (-M[1]+x)^2*sech(M[1]-x)^4 + 2*(M[1]+x)*cosh(M[1]+x)*sinh(M[1]+x) + (M[1]+x)^2*sinh(M[1]+x)^2 + 2*(-M[1]+x)*sech(M[1]-x)^2*tanh(M[1]-x) + 2*(-M[1]+x)^2*sech(M[1]-x)^2*tanh(M[1]-x)^2 )
+			a = M[1]; c1 = M[2]; c2 = M[3]
+			deriv = - sech(a - x)^2 - c1*coth(a)*sech(a - x)^2 
+	 				+ c2*(-a + x)^2*coth(a)*sech(a - x)^4 + sech(a + x)^2
+ 					- c1*coth(a)*sech(a + x)^2 + c2*(a + x)^2*coth(a)*sech(a + x)^4
+ 					- 2*c1*(-a + x)*coth(a)*sech(a - x)^2*tanh(a - x)
+ 					- 2*c2*(-a + x)*coth(a)*sech(a - x)^2*tanh(a - x)
+ 					- 2*c2*(-a + x)^2*coth(a)*sech(a - x)^2*tanh(a - x)^2
+ 					+ 2*c1*(a + x)*coth(a)*sech(a + x)^2*tanh(a + x)
+ 					+ 2*c2*(a + x)*coth(a)*sech(a + x)^2*tanh(a + x)
+ 					- 2*c2*(a + x)^2*coth(a)*sech(a + x)^2*tanh(a + x)^2
 			W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
 		elseif moduli == "aBg"
 			deriv = -M[3]*sech((-M[1]+x)*M[3])^2 + M[3]*sech((M[1]+x)*M[3])^2 + M[2]*coth(M[1])*(-M[3]*sech((-M[1]+x)*M[3])^3 + M[3]*sech((M[1]+x)*M[3])^3 + M[3]*sech((-M[1]+x)*M[3])*tanh((-M[1]+x)*M[3])^2 - M[3]*sech((M[1]+x)*M[3])*tanh((M[1]+x)*M[3])^2 )
@@ -275,7 +285,20 @@ function m3_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64},
 	pW_3 = -sum(dW[3,:])*dx
 
     #
+	#==
+	D = zeros(Float64, 3)
+	G = zeros(Float64, 3,3)
+	
+	D[1] = pW_1 - He_1
+	D[2] = pW_2 - He_2
+	D[3] = pW_3 - He_3
+	
+	G[1,1] = ee_11; G[1,2] = ee_12; G[1,3] = ee_13;
+	G[2,1] = ee_21; G[2,2] = ee_22; G[2,3] = ee_23;
+	G[3,1] = ee_31; G[3,2] = ee_32; G[3,3] = ee_33;
 
+	ddot = G \ D
+	==#
     D1 = pW_1 - He_1
     D2 = pW_2 - He_2
 	D3 = pW_3 - He_3
@@ -286,7 +309,7 @@ function m3_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64},
     ddot[3] = (D3/ee_33 - (ee_13*ee_22*D1)/(ee_33*M) + (ee_13*D2*ee_21)/(ee_33*M) - (ee_23*D2)/(ee_33*ee_22) + (ee_23*D1*ee_12)/(ee_33*M) - (ee_23*ee_12*ee_21*D2)/(ee_33*M*ee_22) )/( 1 + (ee_13*ee_21*ee_32)/(ee_33*M) - (ee_13*ee_22*ee_31)/(ee_33*M) + (ee_23*ee_12*ee_31)/(ee_33*M) - (ee_12*ee_21*ee_32*ee_23)/(M*ee_22*ee_33) - (ee_23*ee_32)/(ee_33*ee_22) )
 	ddot[2] = D2/ee_22 - (D1*ee_12)/M + (ee_12*ee_21*D2)/(M*ee_22) + ( (ee_12*ee_31)/M - (ee_12*ee_21*ee_31)/(M*ee_22) - ee_32/ee_22 )*ddot[3]
 	ddot[1] = ( (ee_11*ee_22)/M )*( D1/ee_11 - (ee_21*D2)/(ee_11*ee_22) + ( (ee_21*ee_32)/(ee_11*ee_22) - ee_31/ee_11 )*ddot[3] )
-
+	
     return ddot
 end
 
