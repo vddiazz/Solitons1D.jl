@@ -183,18 +183,16 @@ function W_kak(model,moduli,x, M,gamma)
             W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
 		elseif moduli == "pR2"
 			a = M[1]; c1 = M[2]; c2 = M[3]
-			deriv = - sech(a-x)^2 
-					- c1*coth(a)*sech(a-x)^2 
-	 				+ c2*(-a+x)^2*coth(a)*sech(a-x)^4 
-					+ sech(a+x)^2
- 					+ c1*coth(a)*sech(a+x)^2 
-					- c2*(a+x)^2*coth(a)*sech(a+x)^4
- 					- 2*c1*(-a+x)*coth(a)*sech(a-x)^2*tanh(a-x)
- 					- 2*c2*(-a+x)*coth(a)*sech(a-x)^2*tanh(a-x)
- 					- 2*c2*(-a+x)^2*coth(a)*sech(a-x)^2*tanh(a-x)^2
- 					- 2*c1*(a+x)*coth(a)*sech(a+x)^2*tanh(a+x)
- 					- 2*c2*(a+x)*coth(a)*sech(a+x)^2*tanh(a+x)
- 					+ 2*c2*(a+x)^2*coth(a)*sech(a+x)^2*tanh(a+x)^2
+			deriv = (2*c2*(x+a)^2*sinh(x+a)*tanh(x+a))/(tanh(a)*cosh(x+a)^3)
+ 					-(2*c2*(x+a)*tanh(x+a))/(tanh(a)*cosh(x+a)^2)
+ 					-(2*c1*(x+a)*sinh(x+a))/(tanh(a)*cosh(x+a)^3)
+ 					-(c2*(x+a)^2*sech(x+a)^2)/(tanh(a)*cosh(x+a)^2)+sech(x+a)^2
+ 					+c1/(tanh(a)*cosh(x+a)^2)
+ 					-(2*c2*(x-a)^2*sinh(x-a)*tanh(x-a))/(tanh(a)*cosh(x-a)^3)
+ 					+(2*c2*(x-a)*tanh(x-a))/(tanh(a)*cosh(x-a)^2)
+ 					+(2*c1*(x-a)*sinh(x-a))/(tanh(a)*cosh(x-a)^3)
+ 					+(c2*(x-a)^2*sech(x-a)^2)/(tanh(a)*cosh(x-a)^2)-sech(x-a)^2
+ 					-c1/(tanh(a)*cosh(x-a)^2)
 			W = 0.5*deriv^2 + U_kak(model,moduli,x,M,gamma)
 		elseif moduli == "aBg"
 			deriv = -M[3]*sech((-M[1]+x)*M[3])^2 + M[3]*sech((M[1]+x)*M[3])^2 + M[2]*coth(M[1])*(-M[3]*sech((-M[1]+x)*M[3])^3 + M[3]*sech((M[1]+x)*M[3])^3 + M[3]*sech((-M[1]+x)*M[3])*tanh((-M[1]+x)*M[3])^2 - M[3]*sech((M[1]+x)*M[3])*tanh((M[1]+x)*M[3])^2 )
@@ -318,6 +316,7 @@ function m3_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64},
 	G[2,1] = ee_21; G[2,2] = ee_22; G[2,3] = ee_23;
 	G[3,1] = ee_31; G[3,2] = ee_32; G[3,3] = ee_33;
 
+	#==
 	if any(!isfinite, G) # fallback, not totally precise
 	    D1 = pW_1 - He_1
     	D2 = pW_2 - He_2
@@ -331,9 +330,20 @@ function m3_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64},
 		ddot[1] = ( (ee_11*ee_22)/M )*( D1/ee_11 - (ee_21*D2)/(ee_11*ee_22) + ( (ee_21*ee_32)/(ee_11*ee_22) - ee_31/ee_11 )*ddot[3] )
 
 	else
-		ddot = G' \ D
+		ddot = G \ D
 	end   
- 
+	==#
+
+	ddot = G \ D
+
+	#-- debug
+ 	#==
+	println("pW_2 = ", pW_2, "  pW_3 = ", pW_3)
+	println("He_2 = ", He_2, "  He_3 = ", He_3)
+	println("cond(G) = ", cond(G))
+	==#
+	#--
+	
 	return ddot
 end
 
@@ -450,10 +460,10 @@ function moduli_RK4_nm2(type::String,model::String,moduli::String,incs::Array{Fl
                 k3_2 = dt*(dx2 + k2_d2/2.)
                 k3_d2 = dt*ddot_step_3[2]
 
-                ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1/2., x2+k3_2/2.], [dx1+k3_d1/2., dx2+k3_d2/2.])
-                k4_1 = dt*(dx1 + k3_d1/2.)
+                ddot_step_4 = m2_step_interp(Ch_grid,dV_grid,X1,X2, [x1+k3_1, x2+k3_2], [dx1+k3_d1, dx2+k3_d2])
+                k4_1 = dt*(dx1 + k3_d1)
                 k4_d1 = dt*ddot_step_4[1]
-                k4_2 = dt*(dx2 + k3_d2/2.)
+                k4_2 = dt*(dx2 + k3_d2)
                 k4_d2 = dt*ddot_step_4[2]
 
             end
@@ -580,12 +590,12 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
 				k3_3 		= dt*(dx3 + k2_d3/2.)
 				k3_d3		= dt*ddot_step_3[3]
 
-                ddot_step_4 = m3_step(model,moduli,gamma, space, [x1+k3_1/2., x2+k3_2/2., x3+k3_3/2.], [dx1+k3_d1/2., dx2+k3_d2/2., dx3+k3_d3/2.])
-                k4_1 		= dt*(dx1 + k3_d1/2.)
+                ddot_step_4 = m3_step(model,moduli,gamma, space, [x1+k3_1, x2+k3_2, x3+k3_3], [dx1+k3_d1, dx2+k3_d2, dx3+k3_d3])
+                k4_1 		= dt*(dx1 + k3_d1)
                 k4_d1 		= dt*ddot_step_4[1]
-                k4_2 		= dt*(dx2 + k3_d2/2.)
+                k4_2 		= dt*(dx2 + k3_d2)
                 k4_d2 		= dt*ddot_step_4[2]
-				k4_3		= dt*(dx3 + k3_d3/2.)
+				k4_3		= dt*(dx3 + k3_d3)
 				k4_d3		= dt*ddot_step_4[3]
 
             elseif type == "interp"
@@ -1143,6 +1153,8 @@ function broyden_2d(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
 		push!(M1,new_m1); push!(M2,new_m2)
 	end
 
+	println("Iterations = $(nit)/$(max_nit)")
+
 	return M1[end],M2[end]
  
 end
@@ -1151,20 +1163,23 @@ end
 
 function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
 
-	s_vals = [0.03,0.04,0.05,0.06,0.07]
+	s_vals = range(0.05^2, 0.35^2, length=20)
 	Ms = zeros(Float64, 3,length(s_vals))
 
 	# initial moduli
 	a0 = 10.
 
 	Ms[1,:] .= a0
-	
-	initial_m1 = 0.75
-	initial_m2 = 0.75
+	c1_0 = 0.01
+	c2_0 = 0.001
 
 	# main loop
 	for (s0_idx,s0) in enumerate(s_vals)
 		println("s=$(s0)")
+
+		initial_m1 = s0_idx == 1 ? c1_0 : Ms[2,s0_idx-1]
+		initial_m2 = s0_idx == 1 ? c2_0 : Ms[3,s0_idx-1]
+
 		M1,M2 = broyden_2d(s0,model,moduli,gamma,x,[a0,initial_m1,initial_m2])
 		println()
 
@@ -1179,6 +1194,11 @@ function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
 	cf1 = vmm \ Ms[2,:] 
 	cf2 = vmm \ Ms[3,:]
 
-	return cf1,cf2
+    resid1 = vmm*cf1 .- Ms[2,:]
+    resid2 = vmm*cf2 .- Ms[3,:]
+    println("Max residual: C1 = $(maximum(abs.(resid1)))")
+    println("Max residual: C2 = $(maximum(abs.(resid2)))")
+
+	return cf1,cf2, Ms[2,:],Ms[3,:]
 
 end 

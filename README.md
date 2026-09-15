@@ -27,14 +27,18 @@ This package is aimed at computing kink-antikink (KAK) collisions using full-fie
 
 ### Full Field (FF):
 - KAK collisions for $\phi^4$ theory on $\mathbb{R}$.
-- KAK-KAK collisions for $\phi^4$ theory on $S^1$.
+- KAK collisions for $\phi^4$ theory on $S^1$.
 
 ### Collective Coordinate Models (CCM):
-- KAK moduli space dynamics for Poincaré mode + shape mode.
-- KAK moduli space dynamics for Poincaré mode + modified shape mode.
+- `aB`: translational mode + shape mode.
+- `maB`: translational mode + modified shape mode.
+- `pR`: translational mode + pRCCM with one Derrick mode
+- `mpR`: translational mode + pRCCM with one modified Derrick mode
 
 ## References
 
 [1] Manton N., Sutcliffe P. (2004), *Topological Solitons*, Cambridge University Press.
 
 [2] Press W.H., Teukolsky S.A., Vetterling W.T., Flannery B.P. (2007), *Numerical Recipes: The Art of Scientific Computing (3º ed.)*, Cambridge University Press.
+
+[3] Adam C. *et al.* (2022), arXiv:2111.06790v4.
