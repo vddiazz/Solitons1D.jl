@@ -4,35 +4,6 @@ using Plots
 using SpecialFunctions
 using LoopVectorization
 
-#-------------------- moduli kak field
-
-function kak_phi4(x,X)
-
-    a = X[1]; b = X[2]
-
-    F = tanh(x+a) - tanh(x-a) - 1 + (b/tanh(a))*(sinh(x+a)/(cosh(x+a)^2) - sinh(x-a)/(cosh(x-a)^2))
-
-    return F
-end
-
-function profile_kak_m2(space,model,a,b)
-    
-    Jarr = space
-    
-    J = length(Jarr)
-
-    F = zeros(Float64, J)
-
-    if model == "phi4"
-        for j in 1:1:J
-            F[j] = tanh(Jarr[j]+a) - tanh(Jarr[j]-a) - 1 + (b/tanh(a))*(sinh(Jarr[j]+a)/(cosh(Jarr[j]+a)^2) - sinh(Jarr[j]-a)/(cosh(Jarr[j]-a)^2))
-        end
-    end
-
-    return F
-
-end
-
 #-------------------- energy
 
 function energy_m2(field_m,field,field_p,out)

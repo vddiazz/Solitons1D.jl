@@ -16,22 +16,25 @@ export ff_origin
 include("ff_plot.jl")
 export ff_anim
 
-include("moduli_solve.jl")
-export eq_import
-export moduli_RK4_m2
+include("field.jl")
 export F_kink
 export U_kink
 export F_kak
 export U_kak
 export W_kak
+
+include("moduli_solve.jl")
+export eq_import
+export moduli_RK4_m2
+
 export m2_step
 export moduli_RK4_nm2
 export mkgrid_m2
 export m2_step_interp
 export FAST_moduli_RK4_nm2
 
-export moduli_RK4_nm3
 export m3_step
+export moduli_RK4_nm3
 
 export ode_num
 export broyden_1d
@@ -39,7 +42,6 @@ export broyden_2d
 export incs_m3
 
 include("aux.jl")
-export profile_kak_m2
 export energy_m2
 
 include("aux_interp.jl")
