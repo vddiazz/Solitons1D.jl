@@ -161,8 +161,12 @@ function m2_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64},
     ddot[2] = D2*(1/ee_22 + ee_12*ee_21/ee_22/M) - D1*ee_12/M
     ==#
 
-    ddot = G \ D
-    
+    if any(!isfinite, G) || rank(G) < size(G, 1)
+	ddot = [0.,0.]
+    else
+	ddot = G \ D
+    end    
+
     return ddot
 end
 
@@ -237,7 +241,11 @@ function m3_step(model::String,moduli::String,gamma::Float64,x::Vector{Float64},
     end   
     ==#
 
-    ddot = G \ D
+    if any(!isfinite, G) || rank(G) < size(G, 1)
+    	ddot = [0.,0.,0.]
+    else
+    	ddot = G \ D
+    end
 
     #-- debug
     #==
