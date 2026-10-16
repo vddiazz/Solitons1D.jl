@@ -417,7 +417,7 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
         gamma = 0.
     elseif moduli == "mpR2"
         gamma = 1/sqrt(1-incs[2]^2)
-    end
+	end
 
     # method selection
     if type == "interp"
@@ -435,53 +435,53 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
     #---------- RK4
     @showprogress 1 "Computing..." for n in 1:1:N 
         @inbounds @fastmath begin
-	    # save data
-            push!(l1,x1)
-            push!(ld1,dx1)
+	    	# save data
+        	push!(l1,x1)
+        	push!(ld1,dx1)
             push!(l2,x2)
             push!(ld2,dx2)
-	    push!(l3,x3)
-	    push!(ld3,dx3)
+	    	push!(l3,x3)
+	    	push!(ld3,dx3)
 	
             # compute next step
             t = t+dt
             
             if type == "fr"
-		ddot_step_1 = m3_step(model,moduli,gamma, space, [x1,x2,x3], [dx1,dx2,dx3])
+				ddot_step_1 = m3_step(model,moduli,gamma, space, [x1,x2,x3], [dx1,dx2,dx3])
                 k1_1 		= dt*dx1
                 k1_d1 		= dt*ddot_step_1[1]
                 k1_2 		= dt*dx2
                 k1_d2 		= dt*ddot_step_1[2]
-		k1_3 		= dt*dx3
-		k1_d3		= dt*ddot_step_1[3]
+				k1_3 		= dt*dx3
+				k1_d3		= dt*ddot_step_1[3]
 
                 ddot_step_2 = m3_step(model,moduli,gamma, space, [x1+k1_1/2., x2+k1_2/2., x3+k1_3/2], [dx1+k1_d1/2., dx2+k1_d2/2., dx3+k1_d3/2.])
                 k2_1 		= dt*(dx1 + k1_d1/2.)
                 k2_d1 		= dt*ddot_step_2[1]
                 k2_2 		= dt*(dx2 + k1_d2/2.)
                 k2_d2 		= dt*ddot_step_2[2]
-		k2_3		= dt*(dx3 + k1_d3/2.)
-		k2_d3		= dt*ddot_step_2[3]
+				k2_3		= dt*(dx3 + k1_d3/2.)
+				k2_d3		= dt*ddot_step_2[3]
 
                 ddot_step_3 = m3_step(model,moduli,gamma, space, [x1+k2_1/2., x2+k2_2/2., x3+k2_3/2.], [dx1+k2_d1/2., dx2+k2_d2/2., dx3+k2_d3/2.])
                 k3_1 		= dt*(dx1 + k2_d1/2.)
                 k3_d1 		= dt*ddot_step_3[1]
                 k3_2 		= dt*(dx2 + k2_d2/2.)
                 k3_d2 		= dt*ddot_step_3[2]
-		k3_3 		= dt*(dx3 + k2_d3/2.)
-		k3_d3		= dt*ddot_step_3[3]
+				k3_3 		= dt*(dx3 + k2_d3/2.)
+				k3_d3		= dt*ddot_step_3[3]
 
                 ddot_step_4 = m3_step(model,moduli,gamma, space, [x1+k3_1, x2+k3_2, x3+k3_3], [dx1+k3_d1, dx2+k3_d2, dx3+k3_d3])
                 k4_1 		= dt*(dx1 + k3_d1)
                 k4_d1 		= dt*ddot_step_4[1]
                 k4_2 		= dt*(dx2 + k3_d2)
                 k4_d2 		= dt*ddot_step_4[2]
-		k4_3		= dt*(dx3 + k3_d3)
-		k4_d3		= dt*ddot_step_4[3]
+				k4_3		= dt*(dx3 + k3_d3)
+				k4_d3		= dt*ddot_step_4[3]
 
             elseif type == "interp"
-		# nothing	
-	    end
+				# nothing	
+	    	end
 
             x1n 	= x1 	+ k1_1/6. 	+ k2_1/3. 	+ k3_1/3. 	+ k4_1/6. 
             dx1n	= dx1 	+ k1_d1/6. 	+ k2_d1/3. 	+ k3_d1/3. 	+ k4_d1/6. 
@@ -495,8 +495,8 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
             dx1 = dx1n
             x2 	= x2n
             dx2 = dx2n
-	    x3 	= x3n
-	    dx3 = dx3n
+	    	x3 	= x3n
+	    	dx3 = dx3n
         end
     end
 

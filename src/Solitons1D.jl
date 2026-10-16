@@ -43,6 +43,7 @@ export incs_m3
 
 include("aux.jl")
 export energy_m2
+export energy_moduli
 
 include("aux_interp.jl")
 export lip
