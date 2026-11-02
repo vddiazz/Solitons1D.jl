@@ -412,11 +412,19 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
     l3 	= Float64[] 
     ld3 = Float64[]
 
+	### gamma sampling only
+	vs = range(0.0, 0.5, length=50)
+	gamma_vals = 1 ./ sqrt.(1 .- vs .^ 2) 
+	#gamma = 2.294157338705618 # v=0.9
+	#gamma = 7.088812050083354 # v=0.99
+	###
+
     # gamma selection
-    if moduli == "aB" || moduli == "pR2"
+    if moduli == "pR2"
         gamma = 0.
-    elseif moduli == "mpR2"
-        gamma = 1/sqrt(1-incs[2]^2)
+    elseif moduli == "mpR2" || moduli == "mmpR2"
+        #gamma = 1/sqrt(1-incs[2]^2)
+        gamma = gamma_vals[19] # do gamma_idx+1
 	end
 
     # method selection
@@ -429,7 +437,7 @@ function moduli_RK4_nm3(type::String,model::String,moduli::String,incs::Array{Fl
     println()
     println("#--------------------------------------------------#")
     println()
-    println("KAK collision: M1=$(incs[1]), dM1=$(incs[2]), M2=$(incs[3]), dM2=$(incs[4]), M3=$(incs[5]), dM3=$(incs[6])")
+    println("KAK collision: M1=$(incs[1]), dM1=$(incs[2]), M2=$(incs[3]), dM2=$(incs[4]), M3=$(incs[5]), dM3=$(incs[6]), gamma=$(gamma)")
     println()
 
     #---------- RK4
@@ -908,11 +916,11 @@ function ode_num(s::Float64,model::String,moduli::String,gamma::Float64,x::Vecto
     v = zeros(T, length(x))
 
     @threads for idx in 1:length(x)
-	e[:,idx] .= ForwardDiff.gradient(M -> F_kink(model,moduli,x[idx],M,gamma), M0)
+		e[:,idx] .= ForwardDiff.gradient(M -> F_kink(model,moduli,x[idx],M,gamma), M0)
     	
-	v1 = ForwardDiff.derivative(x0 -> F_kink(model,moduli,x0,M0,gamma), x[idx])
-	v2 = U_kink(model,moduli,x[idx],M0,gamma)
-	v[idx] = 0.5*v1^2 + v2
+		v1 = ForwardDiff.derivative(x0 -> F_kink(model,moduli,x0,M0,gamma), x[idx])
+		v2 = U_kink(model,moduli,x[idx],M0,gamma)
+		v[idx] = 0.5*v1^2 + v2
     end
 
     # metric
@@ -991,29 +999,30 @@ function broyden_2d(s::Float64,model::String,moduli::String,gamma::Float64,x::Ve
     while epsilon > prec && nit < max_nit
     	nit = nit + 1		
 
-	# update moduli
-	Mtemp = [a0,M1[end], M2[end]]
+		# update moduli
+		Mtemp = [a0,M1[end], M2[end]]
 
-	# compute residual
-	Ftemp = ForwardDiff.gradient(M -> W(M), Mtemp)
-			
-	# update
-	delta_m = -J \ Ftemp[2:3]
+		# compute residual
+		Ftemp = ForwardDiff.gradient(M -> W(M), Mtemp)
+					
+		# update
+		delta_m = -J \ Ftemp[2:3]
 
-	new_m1 = Mtemp[2] + delta_m[1]
-	new_m2 = Mtemp[3] + delta_m[2]
+		new_m1 = Mtemp[2] + delta_m[1]
+		new_m2 = Mtemp[3] + delta_m[2]
 
-	Y = ForwardDiff.gradient(M -> W(M), [a0,new_m1,new_m2])[2:3] .- Ftemp[2:3]
-	J += ((Y - J*delta_m) * delta_m')/(delta_m' * delta_m)
+		Y = ForwardDiff.gradient(M -> W(M), [a0,new_m1,new_m2])[2:3] .- Ftemp[2:3]
+		J += ((Y - J*delta_m) * delta_m')/(delta_m' * delta_m)
 
-	# check termination
-	Fnew = ForwardDiff.gradient(M -> W(M), [a0,new_m1,new_m2])
-	epsilon = norm(Fnew[2:3])
+		# check termination
+		Fnew = ForwardDiff.gradient(M -> W(M), [a0,new_m1,new_m2])
+		epsilon = norm(Fnew[2:3])
 
-	# save data
-	println("Step $(nit): (m1,m2) = ($(new_m1),$(new_m2))")
+		# save data
+		println("gamma = $(gamma)")
+		println("Step $(nit): (m1,m2) = ($(new_m1),$(new_m2))")
 
-	push!(M1,new_m1); push!(M2,new_m2)
+		push!(M1,new_m1); push!(M2,new_m2)
     end
 
     println("Iterations = $(nit)/$(max_nit)")
@@ -1038,16 +1047,16 @@ function incs_m3(model::String,moduli::String,gamma::Float64,x::Vector{Float64})
 
     # main loop
     for (s0_idx,s0) in enumerate(s_vals)
-	println("s=$(s0)")
+		println("s=$(s0)")
 
-	initial_m1 = s0_idx == 1 ? c1_0 : Ms[2,s0_idx-1]
-	initial_m2 = s0_idx == 1 ? c2_0 : Ms[3,s0_idx-1]
+		initial_m1 = s0_idx == 1 ? c1_0 : Ms[2,s0_idx-1]
+		initial_m2 = s0_idx == 1 ? c2_0 : Ms[3,s0_idx-1]
 
-	M1,M2 = broyden_2d(s0,model,moduli,gamma,x,[a0,initial_m1,initial_m2])
-	println()
+		M1,M2 = broyden_2d(s0,model,moduli,gamma,x,[a0,initial_m1,initial_m2])
+		println()
 
-	Ms[2,s0_idx] = M1
-	Ms[3,s0_idx] = M2
+		Ms[2,s0_idx] = M1
+		Ms[3,s0_idx] = M2
     end
 
     # fit: c[1] + c[2]x + c[3]x^2 + ... + c[n]x^(n-1) + ...

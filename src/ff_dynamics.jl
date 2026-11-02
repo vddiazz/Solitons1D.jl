@@ -29,7 +29,7 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
     J = convert(Int64,(xf-xi)/dx)
     N = convert(Int64,tf/dt)
 
-    Jarr = range(xi,xf-dx; step=dx)
+    Jarr = range(xi,xf-dx; step=dx) # stops at xf-dx 
     Narr = range(0.0,tf-dt; step=dt)
 
     # initialization
@@ -43,11 +43,13 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
     
     # temporal ic: initial configuration
     for j in 1:1:J
-        x = xi + j*dx
+        x = xi + (j-1)*dx
 
         if model == "phi4"
-            F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 # field
-            F[j,2] = F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 + (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt ) # derivative
+            F[j,1] = tanh(gamma*(x+a0)) - tanh(gamma*(x-a0)) - 1 
+            F[j,2] = ( F[j,1] - ( ((gamma*v0)/(cosh(gamma*(x+a0)))^2 
+						+ (gamma*v0)/(cosh(gamma*(x-a0)))^2 )*dt )
+					 ) 
         end
         if model == "phi6" # PENDING
             F[j,1] = 0
@@ -85,7 +87,10 @@ function ff_kak(model::String,ff_space,ff_time,incs,bcs::String,out::String,outp
         for j in 2:1:J-1
             # models
             if model == "phi4"
-                F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) + 2*(1-F[j,n-1]^2)*F[j,n-1])*dt^2 + 2*F[j,n-1] - F[j,n-2]
+                F[j,n] = ( ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) 
+						 + 2*(1-F[j,n-1]^2)*F[j,n-1])*dt^2 + 2*F[j,n-1] 
+						 - F[j,n-2]
+						 )
             elseif model == "phi6"
                 F[j,n] = ((F[j+1,n-1]-2*F[j,n-1]+F[j-1,n-1])/(dx^2) - F[j,n-1]*(1-F[j,n-1]^2)^2 + 2*(1-F[j,n-1]^2)*F[j,n-1]^3 )*dt^2 + 2*F[j,n-1] - F[j,n-2]
             elseif model == "sG"

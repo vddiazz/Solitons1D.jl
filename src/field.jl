@@ -15,6 +15,9 @@ function F_kink(model,moduli,x, M, gamma)
 			f = tanh(x-a) + C1*(x-a)/(cosh(x-a))^2 - C2*(x-a)^2*tanh(x-a)/cosh(x-a)^2
 		elseif moduli == "aBg"
 			#
+		elseif moduli == "mpR2"
+			a = M[1]; C1 = M[2]; C2 = M[3]
+			f = tanh(gamma*(x-a)) + C1*(gamma*(x-a))/(cosh(gamma*(x-a)))^2 - C2*(gamma*(x-a))^2*tanh(gamma*(x-a))/cosh(gamma*(x-a))^2
 		end
     end
     return f
@@ -30,9 +33,16 @@ end
 function F_kak(model,moduli,x, M, gamma)
     if model == "phi4"
         if moduli == "aB"
-            f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( sinh(x+M[1])/(cosh(x+M[1]))^2 - sinh(x-M[1])/(cosh(x-M[1]))^2 )
+            f = ( tanh(x+M[1]) - tanh(x-M[1]) - 1 
+				+ (M[2]/tanh(M[1]))*( sinh(x+M[1])/(cosh(x+M[1]))^2 
+				- sinh(x-M[1])/(cosh(x-M[1]))^2 )
+				)
         elseif moduli == "maB"
-            f = tanh(gamma*(x+M[1])) - tanh(gamma*(x-M[1])) - 1 + (M[2]/tanh(M[1]))*( sinh(gamma*(x+M[1]))/(cosh(gamma*(x+M[1])))^2 - sinh(gamma*(x-M[1]))/(cosh(gamma*(x-M[1])))^2 )
+            f = ( tanh(gamma*(x+M[1])) - tanh(gamma*(x-M[1])) - 1 
+				+ (M[2]/tanh(M[1]))*
+				( sinh(gamma*(x+M[1]))/(cosh(gamma*(x+M[1])))^2 
+				- sinh(gamma*(x-M[1]))/(cosh(gamma*(x-M[1])))^2 )
+				)
         elseif moduli == "pR"
             f = tanh(x+M[1]) - tanh(x-M[1]) - 1 + (M[2]/tanh(M[1]))*( (x+M[1])/cosh(x+M[1])^2 - (x-M[1])/cosh(x-M[1])^2 )
         elseif moduli == "mpR"
@@ -66,7 +76,20 @@ function F_kak(model,moduli,x, M, gamma)
 				/(tanh(M[1])*cosh((x-M[1])*gamma)^2)
 				-1
 				)
-
+		elseif moduli == "mmpR2"
+			f = (
+				-(M[3]*(x+M[1])^2*gamma^2*tanh((x+M[1])*gamma))
+				/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^2)
+				+tanh((x+M[1])*gamma)
+				+(M[2]*(x+M[1])*gamma)
+				/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^2)
+				+(M[3]*(x-M[1])^2*gamma^2*tanh((x-M[1])*gamma))
+				/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^2)
+				-tanh((x-M[1])*gamma)
+				-(M[2]*(x-M[1])*gamma)
+				/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^2)
+				-1
+				)
 		end
     end
     return f
@@ -144,6 +167,33 @@ function W_kak(model,moduli,x, M,gamma)
 					-gamma*sech((x-M[1])*gamma)^2
 					-(M[2]*gamma)
 					/(tanh(M[1])*cosh((x-M[1])*gamma)^2)
+					)
+ 
+			W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)
+		elseif moduli == "mmpR2"
+			deriv = (
+					+(2*M[3]*(x+M[1])^2*gamma^3*sinh((x+M[1])*gamma)*tanh((x+M[1])*gamma))
+					/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^3)
+					-(2*M[3]*(x+M[1])*gamma^2*tanh((x+M[1])*gamma))
+					/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^2)
+					-(2*M[2]*(x+M[1])*gamma^2*sinh((x+M[1])*gamma))
+					/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^3)
+					-(M[3]*(x+M[1])^2*gamma^3*sech((x+M[1])*gamma)^2)
+					/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^2)
+					+gamma*sech((x+M[1])*gamma)^2
+					+(M[2]*gamma)
+					/(tanh(gamma*M[1])*cosh((x+M[1])*gamma)^2)
+					-(2*M[3]*(x-M[1])^2*gamma^3*sinh((x-M[1])*gamma)*tanh((x-M[1])*gamma))
+					/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^3)
+					+(2*M[3]*(x-M[1])*gamma^2*tanh((x-M[1])*gamma))
+					/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^2)
+					+(2*M[2]*(x-M[1])*gamma^2*sinh((x-M[1])*gamma))
+					/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^3)
+					+(M[3]*(x-M[1])^2*gamma^3*sech((x-M[1])*gamma)^2)
+					/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^2)
+					-gamma*sech((x-M[1])*gamma)^2
+					-(M[2]*gamma)
+					/(tanh(gamma*M[1])*cosh((x-M[1])*gamma)^2)
 					)
  
 			W = 0.5*(deriv)^2 + U_kak(model,moduli,x,M,gamma)

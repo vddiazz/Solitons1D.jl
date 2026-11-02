@@ -8,6 +8,10 @@ using NPZ
 using Plots
 using SpecialFunctions
 
+include("ana.jl")
+export period_moduli
+export period_ff
+
 include("ff_dynamics.jl")
 export ff_kak
 export ff_kakkak

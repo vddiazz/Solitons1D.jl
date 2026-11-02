@@ -41,7 +41,18 @@ function energy_moduli(model::String,moduli::String,x::Array{Float64},M0,dM0)
     N 	= length(M0[1])
     dx 	= x[2]-x[1]
 
-	gamma = 1/sqrt(1-dM0[1][1]^2)
+	#vs = range(0.0, 0.5, length=50)
+	#gamma_vals = 1 ./ sqrt.(1 .- vs .^ 2) 
+	#gamma = 2.294157338705618 # v=0.9
+	#gamma = 7.088812050083354 # v=0.99
+	
+	# gamma selection
+	if moduli == "pR2"
+		gamma = 0.
+	elseif moduli == "mpR2" || moduli == "mmpR2"
+		gamma = 1/sqrt(1-dM0[1][1]^2)
+		#gamma = gamma_vals[50] # do gamma_idx+1
+	end
 
     #--- metric and potential
 	g 	= zeros(Float64, N,nm,nm)
