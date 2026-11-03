@@ -38,10 +38,12 @@ function period_moduli(path::String,model::String,moduli::String,dt::Float64,dx:
 
 end
 
-function period_ff(path::String,model::String,vs::Array{Float64})
+function period_ff(path::String,model::String,dt::Float64,dx::Float64,vs::Array{Float64})
 
 	T = zeros(Float64, length(vs))
-	
+
+	N = Int64(150/dt)
+
 	println()
 	@showprogress 1 "Computing times..." for (idx,vin) in enumerate(vs)
 

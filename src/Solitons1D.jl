@@ -48,6 +48,7 @@ export incs_m3
 include("aux.jl")
 export energy_m2
 export energy_moduli
+export pot_kak_m2
 
 include("aux_interp.jl")
 export lip
