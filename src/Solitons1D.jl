@@ -11,6 +11,7 @@ using SpecialFunctions
 include("ana.jl")
 export period_moduli
 export period_ff
+export omega_flight_shape
 
 include("ff_dynamics.jl")
 export ff_kak
